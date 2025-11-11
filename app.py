@@ -26,41 +26,29 @@ h1, h2, h3 {
     text-align: center;
 }
 
-# ---------- Welcome Page ----------
-if st.session_state.page == "welcome":
-    st.markdown("""
-    <div id="welcome-container">
-        <h1>😊 Keep Smiling Job Finder</h1>
-        <h3>💼 Find your next job closer to home</h3>
-        <img src="https://media.giphy.com/media/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="260" style="border-radius:12px; margin:25px 0;">
-        <p style="font-size:18px; color:#1e293b;">Upload your job list and discover nearby opportunities instantly!</p>
-        <div style="margin-top:30px;">
-            <form action="#" method="get" style="display:flex; justify-content:center;">
-                <button type="submit" style="
-                    background: linear-gradient(135deg, #2563eb, #1d4ed8);
-                    color: white;
-                    border: none;
-                    border-radius: 10px;
-                    padding: 14px 34px;
-                    font-size: 22px;
-                    font-weight: 600;
-                    cursor: pointer;
-                    box-shadow: 0 4px 10px rgba(37,99,235,0.3);
-                    transition: all 0.3s ease-in-out;
-                "
-                onmouseover="this.style.transform='scale(1.08)'"
-                onmouseout="this.style.transform='scale(1)'">
-                    🚀 Let's Start
-                </button>
-            </form>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    if st.button("🚀 Let's Start", key="start_hidden"):
-        st.session_state.page = "main"
-        st.rerun()
-
+/* ---------- Welcome Page ---------- */
+#welcome-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 80vh;
+    text-align: center;
+}
+#welcome-container button {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+    color: white !important;
+    border-radius: 10px !important;
+    padding: 14px 34px !important;
+    font-size: 22px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s ease-in-out;
+    box-shadow: 0 4px 10px rgba(37,99,235,0.3);
+}
+#welcome-container button:hover {
+    background: linear-gradient(135deg, #1d4ed8, #2563eb) !important;
+    transform: scale(1.08);
+}
 
 /* ---------- Expander Cards ---------- */
 div[data-testid="stExpander"] {
