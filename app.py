@@ -3,113 +3,91 @@ import pandas as pd
 from math import radians, sin, cos, sqrt, atan2
 from difflib import get_close_matches
 
-# ------------------ Streamlit Page Config ------------------
-st.set_page_config(
-    page_title="😊 Keep Smiling Job Finder",
-    layout="wide",
-    page_icon="💼"
-)
+# ---------- Streamlit setup ----------
+st.set_page_config(page_title="😊 Keep Smiling Job Finder", layout="wide", page_icon="💼")
 
-# ------------------ Custom CSS Styling ------------------
+# ---------- CSS Styling ----------
 st.markdown("""
-    <style>
-    .stApp {
-        background: linear-gradient(135deg, #e0f2ff, #f5f7ff);
-        font-family: 'Segoe UI', sans-serif;
-    }
-    .welcome-box {
-        text-align: center;
-        padding: 80px 20px;
-        background: white;
-        border-radius: 18px;
-        box-shadow: 0 6px 20px rgba(0,0,0,0.1);
-        margin-top: 60px;
-        margin-bottom: 40px;
-    }
-    .welcome-title {
-        font-size: 2.2rem;
-        font-weight: bold;
-        color: #1e3a8a;
-    }
-    .welcome-sub {
-        font-size: 1.1rem;
-        color: #475569;
-        margin-top: 10px;
-    }
-    .section {
-        background-color: white;
-        padding: 20px 30px;
-        border-radius: 14px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        margin-bottom: 25px;
-    }
-    .job-card {
-        background: white;
-        border-radius: 16px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        padding: 20px;
-        margin-bottom: 15px;
-        border-left: 6px solid #2563eb;
-    }
-    .job-header {
-        font-size: 1.1rem;
-        font-weight: bold;
-        color: #1e3a8a;
-        margin-bottom: 4px;
-    }
-    .job-location {
-        color: #475569;
-        font-size: 0.95rem;
-        margin-bottom: 8px;
-    }
-    .center-btn {
-        display: flex;
-        justify-content: center;
-        margin-top: 40px;
-    }
-    </style>
+<style>
+.stApp {background: linear-gradient(135deg,#e0f2ff,#f5f7ff);font-family:'Segoe UI',sans-serif;}
+.welcome-box{text-align:center;padding:80px 20px;background:white;border-radius:18px;
+box-shadow:0 6px 20px rgba(0,0,0,0.1);margin-top:60px;margin-bottom:40px;}
+.welcome-title{font-size:2.3rem;font-weight:bold;color:#1e3a8a;}
+.welcome-sub{font-size:1.1rem;color:#475569;margin-top:10px;}
+.section{background:white;padding:20px 30px;border-radius:14px;
+box-shadow:0 4px 10px rgba(0,0,0,0.1);margin-bottom:25px;}
+.job-card{background:white;border-radius:16px;box-shadow:0 4px 12px rgba(0,0,0,0.1);
+padding:20px;margin-bottom:15px;border-left:6px solid #2563eb;}
+.job-header{font-size:1.1rem;font-weight:bold;color:#1e3a8a;margin-bottom:4px;}
+.job-location{color:#475569;font-size:0.95rem;margin-bottom:8px;}
+.center-btn{display:flex;justify-content:center;margin-top:40px;}
+</style>
 """, unsafe_allow_html=True)
 
-# ------------------ Page State ------------------
+# ---------- Session Page State ----------
 if "page" not in st.session_state:
     st.session_state.page = "welcome"
 
-# ------------------ Welcome Page ------------------
+# ---------- Helper functions ----------
+def normalize_titlecase(text):
+    """Convert text to title case safely."""
+    if isinstance(text, str):
+        return text.strip().title()
+    return text
+
+def haversine_miles(c1, c2):
+    R = 3958.8
+    lat1, lon1 = map(radians, c1)
+    lat2, lon2 = map(radians, c2)
+    dlon, dlat = lon2 - lon1, lat2 - lat1
+    a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+    return R * 2 * atan2(sqrt(a), sqrt(1 - a))
+
+def fuzzy_city_lookup(name):
+    if not isinstance(name, str) or not name.strip():
+        return None
+    name = normalize_titlecase(name.split(",")[0])
+    if name in CA_CITIES:
+        return CA_CITIES[name]
+    match = get_close_matches(name, CITY_LIST, n=1, cutoff=0.8)
+    if match:
+        return CA_CITIES[match[0]]
+    return None
+
+# ---------- Welcome Page ----------
 if st.session_state.page == "welcome":
     st.markdown("""
-        <div class="welcome-box">
-            <div class="welcome-title">😊 Welcome to Keep Smiling Job Finder</div>
-            <div class="welcome-sub">
-                Find your dream job closer to home — smart, fast, and beautifully simple.<br>
-                Upload your job listings, choose your location, and explore opportunities nearby!
-            </div>
+    <div class="welcome-box">
+        <div class="welcome-title">😊 Welcome to Keep Smiling Job Finder</div>
+        <div class="welcome-sub">
+            Discover jobs near you — smart, fast, and simple.<br>
+            Upload your job listings and explore opportunities close to home.
         </div>
+    </div>
     """, unsafe_allow_html=True)
 
-    # Use Streamlit native button (no HTML form)
-    col1, col2, col3 = st.columns([1,2,1])
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.button("🚀 Let's Start"):
             st.session_state.page = "main"
             st.rerun()
 
-# ------------------ Main App Page ------------------
+# ---------- Main Page ----------
 elif st.session_state.page == "main":
-
     st.title("😊 Keep Smiling Job Finder")
     st.markdown("### 💼 Find your next job closer to home")
 
-    # ------------------ Load California cities + ZIPs ------------------
+    # ----- Load city + zip -----
     @st.cache_data(show_spinner=False)
     def load_ca_cities_github(url):
         df = pd.read_csv(url)
         city_dict, zip_dict = {}, {}
-        for _, row in df.iterrows():
-            city_name = str(row['city']).strip().title()
-            lat, lng = row['lat'], row['lng']
-            city_dict[city_name] = (lat, lng)
-            if pd.notna(row['zips']):
-                for z in str(row['zips']).split():
+        for _, r in df.iterrows():
+            city = normalize_titlecase(r["city"])
+            lat, lng = r["lat"], r["lng"]
+            city_dict[city] = (lat, lng)
+            if pd.notna(r["zips"]):
+                for z in str(r["zips"]).split():
                     zip_dict[z] = (lat, lng)
         return city_dict, zip_dict
 
@@ -117,60 +95,49 @@ elif st.session_state.page == "main":
     CA_CITIES, ZIP_TO_COORD = load_ca_cities_github(GITHUB_URL)
     CITY_LIST = sorted(CA_CITIES.keys())
 
-    # ------------------ Helper Functions ------------------
-    def normalize_location(loc):
-        return loc.strip().title() if isinstance(loc, str) else loc
-
-    def haversine_miles(coord1, coord2):
-        R = 3958.8
-        lat1, lon1 = map(radians, coord1)
-        lat2, lon2 = map(radians, coord2)
-        dlon, dlat = lon2 - lon1, lat2 - lat1
-        a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return R * c
-
-    def fuzzy_city_lookup(city_name):
-        if not isinstance(city_name, str) or not city_name.strip():
-            return None
-        city_name = normalize_location(city_name.split(",")[0])
-        if city_name in CA_CITIES:
-            return CA_CITIES[city_name]
-        match = get_close_matches(city_name, CITY_LIST, n=1, cutoff=0.8)
-        if match:
-            return CA_CITIES[match[0]]
-        return None
-
-    # ------------------ Upload CSV ------------------
+    # ----- Upload CSV -----
     st.markdown("### 📂 Upload Job Data")
-    uploaded_file = st.file_uploader("Upload your jobs CSV file", type=['csv'])
+    uploaded_file = st.file_uploader("Upload your jobs CSV file", type=["csv"])
 
     if uploaded_file:
         jobs_df = pd.read_csv(uploaded_file)
-        if 'location' not in jobs_df.columns:
-            st.error("Your CSV must include a 'location' column.")
+        jobs_df.columns = jobs_df.columns.str.strip()
+
+        # Auto-detect columns (case-insensitive)
+        client_col = next((c for c in jobs_df.columns if "client" in c.lower()), None)
+        loc_col = next((c for c in jobs_df.columns if "loc" in c.lower()), None)
+        pos_col = next((c for c in jobs_df.columns if "position" in c.lower()), None)
+        lang_col = next((c for c in jobs_df.columns if "lang" in c.lower()), None)
+        pay_col = next((c for c in jobs_df.columns if "pay" in c.lower()), None)
+        sched_col = next((c for c in jobs_df.columns if "sched" in c.lower()), None)
+
+        if not loc_col:
+            st.error("❌ Could not find a location column in your CSV.")
             st.stop()
 
-        jobs_df['location'] = jobs_df['location'].apply(normalize_location)
+        # Normalize capitalization for all text columns
+        for col in jobs_df.columns:
+            if jobs_df[col].dtype == object:
+                jobs_df[col] = jobs_df[col].apply(normalize_titlecase)
 
-        # ------------------ Search Form ------------------
+        # ----- Search UI -----
         st.markdown("### 🔍 Search Jobs Near You")
         st.markdown('<div class="section">', unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-
-        with col1:
+        c1, c2 = st.columns(2)
+        with c1:
             search_type = st.radio("Search by:", ["City", "ZIP Code"])
-        with col2:
-            search_radius = st.slider("Search radius (miles)", 1, 100, 50)
+        with c2:
+            radius = st.slider("Search radius (miles)", 1, 100, 50)
 
         candidate_coord = None
+        selected_city = None
 
         if search_type == "City":
             city_input = st.text_input("Enter your city (California)").strip().title()
             if city_input and len(city_input) >= 2:
                 suggestions = [c for c in CITY_LIST if city_input in c]
                 if suggestions:
-                    candidate_city = st.selectbox("Select city:", suggestions)
+                    selected_city = st.selectbox("Select city:", suggestions)
                 else:
                     st.info("No matching city found.")
             else:
@@ -184,60 +151,54 @@ elif st.session_state.page == "main":
                     st.error("ZIP not found in California.")
 
         st.markdown('<div class="center-btn">', unsafe_allow_html=True)
-        search_btn = st.button("🔍 Find Jobs")
+        go = st.button("🔍 Find Jobs")
         st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # ------------------ Search Results ------------------
-        if search_btn:
+        # ----- Search Results -----
+        if go:
             if search_type == "City":
-                if not city_input:
-                    st.error("Please enter a valid city.")
+                if not selected_city:
+                    st.error("Please select a valid city.")
                     st.stop()
-                candidate_coord = CA_CITIES.get(city_input) or fuzzy_city_lookup(city_input)
-
+                candidate_coord = CA_CITIES.get(selected_city) or fuzzy_city_lookup(selected_city)
             if not candidate_coord:
-                st.error("Unable to determine your location.")
+                st.error("Could not determine your location.")
                 st.stop()
 
             with st.spinner("🔎 Searching nearby jobs..."):
-                jobs_df['Job_Coords'] = jobs_df['location'].apply(fuzzy_city_lookup)
-                jobs_df = jobs_df.dropna(subset=['Job_Coords']).reset_index(drop=True)
-                jobs_df['Distance'] = jobs_df['Job_Coords'].apply(lambda x: haversine_miles(candidate_coord, x))
-                filtered_jobs = jobs_df[jobs_df['Distance'] <= search_radius].sort_values('Distance')
+                jobs_df["Job_Coords"] = jobs_df[loc_col].apply(fuzzy_city_lookup)
+                jobs_df = jobs_df.dropna(subset=["Job_Coords"]).reset_index(drop=True)
+                jobs_df["Distance"] = jobs_df["Job_Coords"].apply(lambda x: haversine_miles(candidate_coord, x))
+                near = jobs_df[jobs_df["Distance"] <= radius].sort_values("Distance")
 
-            if filtered_jobs.empty:
-                st.warning(f"No jobs found within {search_radius} miles.")
+            if near.empty:
+                st.warning(f"No jobs found within {radius} miles.")
             else:
-                st.success(f"🎯 Found {len(filtered_jobs)} job(s) nearby!")
-                for _, row in filtered_jobs.iterrows():
-                    client_name = row.get('client_name', 'Unknown Client')
-                    job_title = row.get('job_title', 'Job')
-                    location = row.get('location', 'Unknown')
-                    distance = row.get('Distance', 0)
-                    schedule = row.get('schedule', '')
-                    language = row.get('language', '')
-                    gender = row.get('gender', '')
-                    desc = row.get('description', '')
+                st.success(f"🎯 Found {len(near)} job(s) nearby!")
 
-                    with st.expander(f"💼 {client_name} - {job_title} ({distance:.1f} mi)"):
+                for _, r in near.iterrows():
+                    client = r.get(client_col, "Unknown Client") if client_col else "Unknown Client"
+                    title = r.get(pos_col, "") if pos_col else ""
+                    city = r.get(loc_col, "Unknown")
+                    dist = r["Distance"]
+                    pay = r.get(pay_col, "")
+                    lang = r.get(lang_col, "")
+                    sched = r.get(sched_col, "")
+
+                    with st.expander(f"💼 {client} - {title or 'Position'} ({dist:.1f} mi)"):
                         st.markdown(f"""
                         <div class='job-card'>
-                            <div class='job-header'>{client_name} - {job_title}</div>
-                            <div class='job-location'>📍 {location} — {distance:.1f} miles away</div>
-                            {"<b>Schedule:</b> " + schedule if schedule else ""}
-                            <br>
-                            {"<b>Language:</b> " + language if language else ""}
-                            <br>
-                            {"<b>Gender:</b> " + gender if gender else ""}
-                            <br><br>
-                            {"<b>Description:</b><br>" + desc if desc else ""}
+                            <div class='job-header'>{client} — {title or 'Position'}</div>
+                            <div class='job-location'>📍 {city} — {dist:.1f} miles away</div>
+                            {f"<b>Pay Rate:</b> {pay}<br>" if pay else ""}
+                            {f"<b>Language:</b> {lang}<br>" if lang else ""}
+                            {f"<b>Schedule:</b> {sched}<br>" if sched else ""}
                         </div>
                         """, unsafe_allow_html=True)
 
-                # ---- Map ----
                 st.subheader("🗺️ Job Locations Map")
-                map_data = pd.DataFrame(filtered_jobs['Job_Coords'].tolist(), columns=['lat', 'lon'])
+                map_data = pd.DataFrame(near["Job_Coords"].tolist(), columns=["lat", "lon"])
                 st.map(map_data)
     else:
         st.info("📄 Upload a CSV file with job listings to start searching.")
