@@ -100,7 +100,7 @@ elif st.session_state.page == "main":
     st.write("Search caregiver job listings by city or ZIP code in California.")
 
     # --- Load California city/ZIP data ---
-    @st.cache_data(show_spinner=False)
+    @st.cache_data(show_spinner=False, ttl=3600)
     def load_ca_data():
         url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/california_cities_minimal.csv"
         df = pd.read_csv(url)
@@ -124,12 +124,14 @@ elif st.session_state.page == "main":
         return CA_CITIES[match[0]] if match else None
 
     def haversine(c1, c2):
-        R = 3958.8
+        if not c1 or not c2:
+            return float('inf')
+        R = 3958.8  # Earth radius in miles
         lat1, lon1 = map(radians, c1)
         lat2, lon2 = map(radians, c2)
         dlat, dlon = lat2 - lat1, lon2 - lon1
         a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
-        return R * 2 * atan2(sqrt(a), sqrt(1-a)
+        return R * 2 * atan2(sqrt(a), sqrt(1 - a))
 
     # --- Upload Jobs CSV ---
     st.markdown("### 📂 Upload Job List")
@@ -154,6 +156,7 @@ elif st.session_state.page == "main":
     else:
         jobs['client'] = "Unknown Client"
 
+    # --- Search UI ---
     st.markdown("### 🔍 Search Jobs Near You")
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
@@ -167,6 +170,8 @@ elif st.session_state.page == "main":
         if not query:
             st.warning("Please enter a city or ZIP code.")
             st.stop()
+
+        # --- Get user coordinates ---
         if search_type == "ZIP Code":
             if not query.isdigit() or len(query) != 5:
                 st.error("Please enter a valid 5-digit ZIP code.")
@@ -174,16 +179,23 @@ elif st.session_state.page == "main":
             user_coords = ZIP_COORDS.get(query)
         else:
             user_coords = get_coords(query)
+
         if not user_coords:
             st.error("⚠️ Could not find that city or ZIP in California.")
             st.stop()
+
+        # --- Match job coordinates ---
         jobs["coords"] = jobs["location"].apply(get_coords)
         missing = jobs["coords"].isna().sum()
         if missing > 0:
             st.warning(f"{missing} job(s) not matched to any city (excluded).")
+
         jobs = jobs.dropna(subset=["coords"])
         jobs["distance"] = jobs["coords"].apply(lambda c: haversine(user_coords, c))
+
         nearby = jobs[jobs["distance"] <= radius].sort_values("distance")
+
+        # --- Results ---
         if nearby.empty:
             st.warning(f"No jobs found within {radius} miles of {query}.")
         else:
@@ -205,6 +217,7 @@ elif st.session_state.page == "main":
                         <p><b>🕒 Schedule:</b> {row.get('schedule', 'N/A')}</p>
                     </div>
                     """, unsafe_allow_html=True)
+
             st.subheader("🗺️ Job Locations")
             map_df = pd.DataFrame([{"lat": c[0], "lon": c[1]} for c in nearby["coords"]])
             st.map(map_df)
