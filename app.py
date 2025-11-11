@@ -13,28 +13,32 @@ st.set_page_config(
 # ------------------ Custom CSS Styling ------------------
 st.markdown("""
     <style>
-    /* Background gradient */
     .stApp {
         background: linear-gradient(120deg, #f0f4ff, #e8f0ff);
         font-family: 'Segoe UI', sans-serif;
     }
 
-    /* Title styling */
     h1 {
         text-align: center;
         color: #1e3a8a;
-        margin-bottom: 0.5em;
+        margin-bottom: 0.2em;
     }
 
-    /* Subheader */
     .subtext {
         text-align: center;
         color: #374151;
         font-size: 1.1rem;
-        margin-bottom: 1.5em;
+        margin-bottom: 2em;
     }
 
-    /* Job card styling */
+    .section {
+        background-color: white;
+        padding: 20px 30px;
+        border-radius: 14px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        margin-bottom: 25px;
+    }
+
     .job-card {
         background: white;
         border-radius: 16px;
@@ -44,19 +48,25 @@ st.markdown("""
         border-left: 6px solid #2563eb;
         transition: transform 0.1s ease-in-out;
     }
-    .job-card:hover {
-        transform: scale(1.01);
-    }
+
+    .job-card:hover { transform: scale(1.01); }
+
     .job-header {
         font-size: 1.1rem;
         font-weight: bold;
         color: #1e3a8a;
         margin-bottom: 4px;
     }
+
     .job-location {
         color: #475569;
         font-size: 0.95rem;
         margin-bottom: 8px;
+    }
+
+    .center-btn {
+        display: flex;
+        justify-content: center;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -69,8 +79,7 @@ st.markdown('<p class="subtext">Find your next job closer to home 💼</p>', uns
 @st.cache_data(show_spinner=False)
 def load_ca_cities_github(url):
     df = pd.read_csv(url)
-    city_dict = {}
-    zip_dict = {}
+    city_dict, zip_dict = {}, {}
     for _, row in df.iterrows():
         city_name = str(row['city']).strip().title()
         lat, lng = row['lat'], row['lng']
@@ -94,8 +103,7 @@ def haversine_miles(coord1, coord2):
     R = 3958.8
     lat1, lon1 = map(radians, coord1)
     lat2, lon2 = map(radians, coord2)
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
+    dlon, dlat = lon2 - lon1, lat2 - lat1
     a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return R * c
@@ -112,7 +120,8 @@ def fuzzy_city_lookup(city_name):
     return None
 
 # ------------------ Upload Jobs CSV ------------------
-uploaded_file = st.file_uploader("📂 Upload your jobs CSV file", type=['csv'])
+st.markdown("### 📂 Upload Job Data")
+uploaded_file = st.file_uploader("Upload your jobs CSV file", type=['csv'])
 
 if uploaded_file:
     jobs_df = pd.read_csv(uploaded_file)
@@ -122,21 +131,26 @@ if uploaded_file:
 
     jobs_df['location'] = jobs_df['location'].apply(normalize_location)
 
-    # Sidebar Inputs
-    with st.sidebar:
-        st.header("🔍 Search Jobs")
-        search_type = st.radio("Search by:", ["City", "ZIP Code"])
-        search_radius = st.slider("Search radius (miles)", 1, 100, 50)
+    # ------------------ Search Section ------------------
+    st.markdown("### 🔍 Search Jobs Near You")
+    with st.container():
+        st.markdown('<div class="section">', unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+
+        with col1:
+            search_type = st.radio("Search by:", ["City", "ZIP Code"])
+        with col2:
+            search_radius = st.slider("Search radius (miles)", 1, 100, 50)
 
         candidate_coord = None
         candidate_city = None
         candidate_zip = None
 
         if search_type == "City":
-            typed = st.text_input("Enter your city (California)").strip().title()
+            city_input = st.text_input("Enter your city (California)").strip().title()
             suggestions = []
-            if typed and len(typed) >= 2:
-                suggestions = [c for c in CITY_LIST if typed in c]
+            if city_input and len(city_input) >= 2:
+                suggestions = [c for c in CITY_LIST if city_input in c]
                 if suggestions:
                     candidate_city = st.selectbox("Select a city:", suggestions)
                 else:
@@ -154,8 +168,12 @@ if uploaded_file:
                 else:
                     st.error("Invalid ZIP code. Must be 5 digits.")
 
-        search_btn = st.button("🚀 Find Jobs")
+        st.markdown('<div class="center-btn">', unsafe_allow_html=True)
+        search_btn = st.button("🚀 Find Jobs", use_container_width=False)
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
+    # ------------------ Search Logic ------------------
     if search_btn:
         # Determine coordinates
         if search_type == "City":
@@ -180,7 +198,7 @@ if uploaded_file:
         else:
             st.success(f"🎯 Found {len(filtered_jobs)} job(s) within {search_radius} miles!")
 
-            # ---- Job Cards ----
+            # ---- Job Expanders ----
             for _, row in filtered_jobs.iterrows():
                 client_name = row.get('client_name', 'Unknown Client')
                 job_title = row.get('job_title', 'Job')
