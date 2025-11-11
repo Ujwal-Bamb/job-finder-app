@@ -5,75 +5,126 @@ from geopy.distance import geodesic
 import folium
 from streamlit_folium import st_folium
 
-# 🎨 PAGE CONFIGURATION
-st.set_page_config(page_title="Keep Smiling 😊 Job Finder", page_icon="😊", layout="wide")
+# ---------------------------------------------
+# 🌈 PAGE CONFIG
+# ---------------------------------------------
+st.set_page_config(
+    page_title="😊 Keep Smiling - Nearby Job Finder 🌍",
+    page_icon="🧭",
+    layout="wide",
+)
 
-# 🌟 HEADER
-st.markdown("""
-    <div style='text-align:center; padding:20px; background-color:#f0f9ff; border-radius:15px;'>
-        <h1 style='color:#2E86C1;'>Keep Smiling 😊 Nearby Job Finder</h1>
-        <h4>Find jobs within 40 miles of your ZIP code</h4>
-    </div>
-""", unsafe_allow_html=True)
+# ---------------------------------------------
+# 🎨 STYLISH HEADER (Animated Gradient)
+# ---------------------------------------------
+st.markdown(
+    """
+    <style>
+    .title {
+        font-size: 42px;
+        text-align: center;
+        font-weight: bold;
+        background: linear-gradient(90deg, #FF6F61, #FFB347);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: slide 3s infinite alternate;
+    }
+    @keyframes slide {
+        from {letter-spacing: 1px;}
+        to {letter-spacing: 3px;}
+    }
+    .subtitle {
+        text-align: center;
+        font-size: 18px;
+        color: #444;
+        margin-top: -10px;
+        margin-bottom: 20px;
+    }
+    </style>
+    <div class="title">😊 Keep Smiling – Nearby Job Finder 🌍</div>
+    <div class="subtitle">Find jobs around your ZIP code within 40 miles — quickly, visually, and easily!</div>
+    """,
+    unsafe_allow_html=True,
+)
 
-# 📍 INPUTS
-st.sidebar.header("🔍 Candidate Details")
-candidate_zip = st.sidebar.text_input("Enter Candidate ZIP Code:", "10001")
-max_distance = st.sidebar.slider("Maximum distance (miles):", 5, 100, 40)
+# ---------------------------------------------
+# 📤 FILE UPLOAD SECTION
+# ---------------------------------------------
+st.sidebar.header("📂 Upload Job Data")
+uploaded_file = st.sidebar.file_uploader("Upload a CSV file with job data", type=["csv"])
 
-# 📋 JOB DATA INPUT
-st.sidebar.header("💼 Job Data Upload")
-st.sidebar.markdown("Upload a CSV with columns like: **ClientName, City, State, GenderRequired, LanguageRequired**")
-uploaded_file = st.sidebar.file_uploader("Choose your job CSV file", type=["csv"])
+st.sidebar.markdown(
+    """
+    **CSV format example:**
+    ```
+    Job Title,City,State,Gender Required,Language
+    Nurse,Chicago,IL,Female,English
+    Technician,Dallas,TX,Male,Spanish
+    ```
+    """
+)
 
-# 🌎 FUNCTION TO GET LAT/LONG
-geolocator = Nominatim(user_agent="job_finder_app")
+# ---------------------------------------------
+# 🧭 USER INPUTS
+# ---------------------------------------------
+st.sidebar.header("📍 Candidate Details")
+zip_code = st.sidebar.text_input("Enter your ZIP Code:")
+radius = st.sidebar.slider("Select search radius (miles):", 5, 100, 40)
 
-def get_lat_lon_from_zip(zip_code):
+# ---------------------------------------------
+# 🌎 PROCESSING LOGIC
+# ---------------------------------------------
+if uploaded_file and zip_code:
+    geolocator = Nominatim(user_agent="job_finder_app")
+
     try:
-        location = geolocator.geocode(zip_code)
-        if location:
-            return (location.latitude, location.longitude)
-    except:
-        return None
-    return None
-
-def get_lat_lon_from_city_state(city, state):
-    try:
-        location = geolocator.geocode(f"{city}, {state}")
-        if location:
-            return (location.latitude, location.longitude)
-    except:
-        return None
-    return None
-
-# 💾 PROCESS JOB DATA
-if uploaded_file:
-    jobs_df = pd.read_csv(uploaded_file)
-
-    if {'City', 'State'}.issubset(jobs_df.columns):
-        candidate_coords = get_lat_lon_from_zip(candidate_zip)
-        if not candidate_coords:
-            st.error("Could not find location for the ZIP code. Please try again.")
+        candidate_location = geolocator.geocode(zip_code)
+        if not candidate_location:
+            st.error("❌ Could not find location for the given ZIP code.")
         else:
-            jobs_df["Coordinates"] = jobs_df.apply(lambda row: get_lat_lon_from_city_state(row["City"], row["State"]), axis=1)
-            jobs_df = jobs_df.dropna(subset=["Coordinates"])
-            jobs_df["Distance_miles"] = jobs_df["Coordinates"].apply(lambda x: geodesic(candidate_coords, x).miles)
+            candidate_coords = (candidate_location.latitude, candidate_location.longitude)
+            df = pd.read_csv(uploaded_file)
 
-            nearby_jobs = jobs_df[jobs_df["Distance_miles"] <= max_distance]
+            # Add job coordinates
+            st.info("🌍 Locating jobs... please wait a moment ⏳")
+            df["Coordinates"] = df.apply(
+                lambda row: geolocator.geocode(f"{row['City']}, {row['State']}"), axis=1
+            )
+            df["Latitude"] = df["Coordinates"].apply(lambda x: x.latitude if x else None)
+            df["Longitude"] = df["Coordinates"].apply(lambda x: x.longitude if x else None)
 
-            st.success(f"✅ Found {len(nearby_jobs)} jobs within {max_distance} miles.")
+            # Drop missing coordinates
+            df = df.dropna(subset=["Latitude", "Longitude"])
 
+            # Calculate distances
+            df["Distance (miles)"] = df.apply(
+                lambda row: geodesic(candidate_coords, (row["Latitude"], row["Longitude"])).miles,
+                axis=1,
+            )
+
+            # Filter nearby jobs
+            nearby_jobs = df[df["Distance (miles)"] <= radius].sort_values("Distance (miles)")
+
+            # Show results
+            st.success(f"🎯 Found {len(nearby_jobs)} job(s) within {radius} miles!")
             st.dataframe(nearby_jobs)
 
-            # 🗺️ SHOW MAP
-            m = folium.Map(location=candidate_coords, zoom_start=9)
-            folium.Marker(candidate_coords, tooltip="Candidate Location", icon=folium.Icon(color="blue")).add_to(m)
-            for _, row in nearby_jobs.iterrows():
-                folium.Marker(row["Coordinates"], tooltip=f"{row['City']}, {row['State']}", icon=folium.Icon(color="green")).add_to(m)
+            # Map view
+            if len(nearby_jobs) > 0:
+                m = folium.Map(location=candidate_coords, zoom_start=8)
+                folium.Marker(
+                    candidate_coords, tooltip="Candidate Location", icon=folium.Icon(color="blue")
+                ).add_to(m)
 
-            st_folium(m, width=700, height=500)
-    else:
-        st.error("CSV must contain 'City' and 'State' columns.")
+                for _, row in nearby_jobs.iterrows():
+                    folium.Marker(
+                        [row["Latitude"], row["Longitude"]],
+                        tooltip=f"{row['Job Title']} - {row['City']}, {row['State']}",
+                        icon=folium.Icon(color="green"),
+                    ).add_to(m)
+
+                st_folium(m, width=700, height=450)
+    except Exception as e:
+        st.error(f"⚠️ Error: {e}")
 else:
-    st.info("👈 Upload a CSV file to find nearby jobs.")
+    st.info("📥 Upload your CSV and enter your ZIP code to begin.")
