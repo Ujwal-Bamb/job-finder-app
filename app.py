@@ -13,7 +13,7 @@ st.set_page_config(page_title="😊 Keep Smiling Job Finder", layout="wide")
 st.markdown("""
     <style>
         body {
-            background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+            background: linear-gradient(-45deg, #ff9a9e, #fad0c4, #a1c4fd, #c2e9fb);
             background-size: 400% 400%;
             animation: gradientMove 8s ease infinite;
         }
@@ -47,9 +47,25 @@ st.markdown("""
             from {opacity: 0;}
             to {opacity: 1;}
         }
+        .glow-button {
+            font-size:18px;
+            padding:10px 25px;
+            border:none;
+            color:white;
+            background:linear-gradient(45deg,#23a6d5,#23d5ab);
+            border-radius:12px;
+            cursor:pointer;
+            box-shadow:0 0 15px #23a6d5;
+            transition:all 0.3s ease;
+        }
+        .glow-button:hover {
+            box-shadow:0 0 25px #23d5ab;
+            transform:scale(1.05);
+        }
     </style>
 """, unsafe_allow_html=True)
 
+# ---------------------- ANIMATED INTRO ----------------------
 if "show_main" not in st.session_state:
     st.session_state.show_main = False
 
@@ -69,12 +85,11 @@ st.title("🌍 Find Nearby Jobs")
 st.markdown("Upload your job list, enter candidate location, and find nearby opportunities instantly!")
 
 # -------- Step 1: Upload CSV --------
-uploaded_file = st.file_uploader("📂 Upload Job CSV (columns: Client, City, State, Gender, Language)", type=["csv"])
+uploaded_file = st.file_uploader("📂 Upload Job CSV (columns: Client, City, State, Gender, Language, Job_Title, etc.)", type=["csv"])
 
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
     df.columns = df.columns.str.strip().str.lower()
-
     st.success(f"✅ Successfully loaded {len(df)} job entries!")
 
     # -------- Step 2: Candidate Location Input --------
@@ -90,10 +105,8 @@ if uploaded_file is not None:
     radius = st.slider("🎯 Search Radius (in miles):", 10, 200, 40)
     find_button = st.button("🔍 Find Nearby Jobs", use_container_width=True)
 
-    # Initialize geocoder
     geolocator = Nominatim(user_agent="job_locator")
 
-    # Cache for speed
     @st.cache_data(show_spinner=False)
     def get_lat_lon(place):
         """Cached geocoding for speed."""
@@ -140,32 +153,42 @@ if uploaded_file is not None:
             else:
                 st.success(f"✅ Found {len(nearby_jobs)} job(s) within {radius} miles!")
 
-                # Step 7: Create map
-                m = folium.Map(location=candidate_coords, zoom_start=8)
-                folium.Marker(candidate_coords, tooltip="Candidate", icon=folium.Icon(color="red")).add_to(m)
-
-                for _, row in nearby_jobs.iterrows():
-                    popup = f"""
-                    <b>Client:</b> {row.get('client','N/A')}<br>
-                    <b>City:</b> {row.get('city','N/A')}<br>
-                    <b>State:</b> {row.get('state','N/A')}<br>
-                    <b>Gender:</b> {row.get('gender','N/A')}<br>
-                    <b>Language:</b> {row.get('language','N/A')}<br>
-                    <b>Distance:</b> {round(row['distance_miles'],1)} miles
-                    """
-                    folium.Marker(
-                        location=[row["latitude"], row["longitude"]],
-                        popup=popup,
-                        icon=folium.Icon(color="blue", icon="briefcase", prefix="fa")
-                    ).add_to(m)
-
-                # Step 8: Show map and results
-                st_folium(m, width=1200, height=600)
-                st.dataframe(
-                    nearby_jobs[["client", "city", "state", "gender", "language", "distance_miles"]]
-                    .sort_values("distance_miles")
-                    .reset_index(drop=True)
+                # Step 7: Select job to view details
+                job_list = nearby_jobs.reset_index(drop=True)
+                selected_job = st.selectbox(
+                    "🧾 Select a job to view details:",
+                    [f"{row['client']} - {row.get('job_title','N/A')} ({round(row['distance_miles'],1)} mi)"
+                     for _, row in job_list.iterrows()],
                 )
+
+                if selected_job:
+                    index = [f"{row['client']} - {row.get('job_title','N/A')} ({round(row['distance_miles'],1)} mi)"
+                             for _, row in job_list.iterrows()].index(selected_job)
+                    job = job_list.iloc[index]
+
+                    # Step 8: Show detailed job info
+                    st.subheader("📄 Job Details")
+                    st.markdown(f"""
+                    **Client:** {job.get('client','N/A')}  
+                    **Job Title:** {job.get('job_title','N/A')}  
+                    **City:** {job.get('city','N/A')}  
+                    **State:** {job.get('state','N/A')}  
+                    **Gender:** {job.get('gender','N/A')}  
+                    **Language:** {job.get('language','N/A')}  
+                    **Schedule:** {job.get('schedule','N/A')}  
+                    **Distance:** {round(job['distance_miles'],1)} miles
+                    """)
+
+                    # Step 9: Ask to show map
+                    if st.button("🗺️ Show Map for this Job"):
+                        m = folium.Map(location=candidate_coords, zoom_start=8)
+                        folium.Marker(candidate_coords, tooltip="Candidate", icon=folium.Icon(color="red")).add_to(m)
+                        folium.Marker(
+                            location=[job["latitude"], job["longitude"]],
+                            popup=f"{job['client']} - {job.get('job_title','N/A')}",
+                            icon=folium.Icon(color="blue", icon="briefcase", prefix="fa")
+                        ).add_to(m)
+                        st_folium(m, width=1200, height=600)
 
 else:
     st.info("📤 Please upload your CSV file to begin.")
