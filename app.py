@@ -1,206 +1,319 @@
-# app.py
 import streamlit as st
 import pandas as pd
+import numpy as np
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
-import ast
-from uszipcode import SearchEngine
+import time
+import base64
 
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="😊 Keep Smiling Job Finder", layout="wide")
-
-# ---------------- WELCOME SCREEN ----------------
-st.markdown("""
-<style>
-/* Full screen animated background */
-.welcome-screen {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100%;
-  height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-  background: linear-gradient(135deg, #11998e, #38ef7d, #ff758c, #ff7eb3);
-  background-size: 400% 400%;
-  animation: gradientBG 10s ease infinite;
-  text-align: center;
-  z-index: 9999;
-}
-@keyframes gradientBG {
-  0% {background-position:0% 50%;}
-  50% {background-position:100% 50%;}
-  100% {background-position:0% 50%;}
-}
-
-/* Title text */
-.title {
-  font-size: 72px;
-  font-weight: 900;
-  background: linear-gradient(to right,#fff200,#ff6a00);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 20px #fff200,0 0 40px #ff6a00;
-  margin-bottom: 20px;
-  animation: fadeIn 2s ease-in-out forwards;
-}
-
-/* Subtitle */
-.subtitle {
-  font-size: 28px;
-  color: #ffffffcc;
-  margin-bottom: 40px;
-  animation: fadeIn 3s ease-in-out forwards;
-}
-
-/* Pulse button */
-.start-btn {
-  padding: 18px 60px;
-  font-size: 26px;
-  font-weight: bold;
-  border-radius: 40px;
-  border: none;
-  background: #ff6a00;
-  color: white;
-  cursor: pointer;
-  animation: pulse 1.5s infinite alternate;
-  box-shadow: 0 0 20px #ff6a00, 0 0 40px #ffb347;
-}
-.start-btn:hover {
-  transform: scale(1.1);
-}
-@keyframes pulse {
-  from {transform: scale(1);}
-  to {transform: scale(1.1);}
-}
-@keyframes fadeIn {
-  from {opacity:0; transform: scale(0.95);}
-  to {opacity:1; transform: scale(1);}
-}
-</style>
-""", unsafe_allow_html=True)
-
-if "main_page" not in st.session_state:
-    st.session_state.main_page = False
-
-if not st.session_state.main_page:
+# CSS styles for animations and themes
+def local_css():
     st.markdown("""
-    <div class="welcome-screen">
-        <h1 class="title">😊 Keep Smiling Job Finder</h1>
-        <h3 class="subtitle">Find your next opportunity closer to home 💼</h3>
-    </div>
+    <style>
+    /* Full screen animated gradient background */
+    @keyframes gradientBG {
+        0%{background-position:0% 50%;}
+        50%{background-position:100% 50%;}
+        100%{background-position:0% 50%;}
+    }
+    .animated-background {
+        background: linear-gradient(-45deg, #ff9a9e, #fad0c4, #fad0c4, #ff9a9e);
+        background-size: 400% 400%;
+        animation: gradientBG 15s ease infinite;
+        height: 100vh;
+        width: 100vw;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+        margin: 0;
+    }
+    /* Glowing gradient text */
+    .glow-text {
+        font-size: 4rem;
+        font-weight: 900;
+        background: linear-gradient(90deg, #ff9a9e, #fad0c4, #ff9a9e);
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+        text-shadow:
+          0 0 10px #ff9a9e,
+          0 0 20px #ff9a9e,
+          0 0 30px #ff9a9e,
+          0 0 40px #ff9a9e;
+        user-select: none;
+    }
+    .subtitle {
+        font-size: 1.5rem;
+        color: white;
+        margin-top: -10px;
+        margin-bottom: 40px;
+        user-select: none;
+    }
+    /* Pulsing button */
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(255, 154, 158, 0.7);
+      }
+      70% {
+          box-shadow: 0 0 0 10px rgba(255, 154, 158, 0);
+      }
+      100% {
+          box-shadow: 0 0 0 0 rgba(255, 154, 158, 0);
+      }
+    }
+    .pulse-button {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #ff9a9e, #fad0c4);
+      border: none;
+      border-radius: 12px;
+      padding: 1rem 3rem;
+      color: #5a1a1f;
+      cursor: pointer;
+      animation: pulse 2s infinite;
+      user-select: none;
+      transition: background 0.3s ease;
+    }
+    .pulse-button:hover {
+      background: linear-gradient(90deg, #ffbec2, #fcd8d9);
+    }
+    /* Dark themed main page */
+    .dark-theme {
+        background-color: #121212;
+        color: white;
+        min-height: 100vh;
+        padding: 3rem;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    /* Job cards */
+    .job-card {
+        background-color: #222;
+        border-radius: 12px;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1rem;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        color: white;
+    }
+    .job-card:hover {
+        background-color: #333;
+    }
+    .job-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    .job-card-details {
+        margin-top: 0.75rem;
+        font-size: 1rem;
+        display: none;
+        white-space: pre-line;
+    }
+    .job-card.expanded .job-card-details {
+        display: block;
+    }
+    </style>
     """, unsafe_allow_html=True)
 
-    if st.button("🚀 Let's Start"):
-        st.session_state.main_page = True
-        st.experimental_rerun()
-    st.stop()
 
-# ---------------- MAIN JOB SEARCH ----------------
-st.title("🌍 Keep Smiling Job Finder")
-st.markdown("Upload your job CSV, enter candidate location, and explore nearby openings instantly!")
+# Welcome screen with animated gradient background
+def welcome_screen():
+    st.markdown("""
+    <div class="animated-background">
+        <div class="glow-text">😊 Keep Smiling Job Finder</div>
+        <div class="subtitle">Find your next opportunity closer to home 💼</div>
+        <button class="pulse-button" id="start-btn">Let's Start</button>
+    </div>
+    <script>
+    const btn = window.parent.document.querySelector('button.pulse-button');
+    btn.onclick = () => {
+        window.parent.postMessage({isStart:true}, '*');
+    }
+    </script>
+    """, unsafe_allow_html=True)
 
-# ---------------- FILE UPLOAD ----------------
-uploaded = st.file_uploader("📂 Upload Job CSV (columns: Client, Job_Title, City, State, Location, Positions, etc.)", type=["csv"])
 
-if uploaded:
-    df = pd.read_csv(uploaded)
-    df.columns = df.columns.str.strip().str.lower()
-    st.success(f"✅ Loaded {len(df)} jobs successfully!")
-
-    # ---------------- CANDIDATE INPUT ----------------
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        zip_code = st.text_input("📮 ZIP Code (optional)")
-    with col2:
-        city = st.text_input("🏙️ City (optional)")
-    with col3:
-        state = st.text_input("🗺️ State (optional)")
-
-    radius = st.slider("🎯 Search Radius (miles)", 10, 200, 40)
-    find = st.button("🔍 Find Jobs Near Me", use_container_width=True)
-
-    geolocator = Nominatim(user_agent="job_locator")
-    search = SearchEngine(simple_zipcode=True)  # US ZIP lookup
-
-    # ---------------- HELPER FUNCTIONS ----------------
-    @st.cache_data(show_spinner=False)
-    def geo(place):
-        try:
-            loc = geolocator.geocode(f"{place}, USA", timeout=10)
-            if loc:
-                return loc.latitude, loc.longitude
-        except:
-            return None, None
-        return None, None
-
-    def get_lat_lon_zip(zip_code):
-        result = search.by_zipcode(zip_code)
-        if result and result.lat is not None and result.lng is not None:
-            return result.lat, result.lng
-        return None, None
-
-    # ---------------- SEARCH JOBS ----------------
-    if find:
-        with st.spinner("📍 Locating jobs near you..."):
-            # Candidate location
-            cand = None
-            if zip_code:
-                cand = get_lat_lon_zip(str(zip_code))
-            if (not cand) or (None in cand):
-                if city and state:
-                    cand = geo(f"{city}, {state}")
-            if (not cand) or (None in cand):
-                st.error("❌ Could not find location. Please check ZIP/City/State.")
-                st.stop()
-
-            # Expand multiple locations per job
-            rows = []
-            for _, r in df.iterrows():
-                locs = r.get("location", "")
-                if isinstance(locs, str) and locs.startswith('['):
-                    try:
-                        loc_list = ast.literal_eval(locs)
-                    except:
-                        loc_list = [loc.strip() for loc in locs.split(',')]
-                elif isinstance(locs, list):
-                    loc_list = locs
+# Parse and expand locations if multiple cities/states or zips are present as lists or strings
+def expand_locations(df):
+    rows = []
+    for _, row in df.iterrows():
+        # Assuming Locations column can be a string of comma-separated locations or list-like string
+        locations = row.get('Location') or row.get('City') or ""
+        if isinstance(locations, str) and (',' in locations or ';' in locations):
+            sep = ',' if ',' in locations else ';'
+            loc_list = [loc.strip() for loc in locations.split(sep)]
+            for loc in loc_list:
+                new_row = row.copy()
+                # We split into city,state if possible, else use as city.
+                if ',' in loc:
+                    city, state = [x.strip() for x in loc.split(',', 1)]
+                    new_row['City'] = city
+                    new_row['State'] = state
                 else:
-                    loc_list = [locs]
-                for loc in loc_list:
-                    new_row = r.copy()
-                    new_row["location"] = loc.strip()
-                    rows.append(new_row)
-            df_expanded = pd.DataFrame(rows)
+                    new_row['City'] = loc
+                    # Keep existing state or empty
+                rows.append(new_row)
+        else:
+            rows.append(row)
+    expanded_df = pd.DataFrame(rows)
+    return expanded_df.reset_index(drop=True)
 
-            # Geocode job locations
-            df_expanded["full_location"] = df_expanded.apply(lambda r: f"{r.get('location','')}, {r.get('state','')}", axis=1)
-            unique_places = df_expanded["full_location"].unique()
-            locmap = {x: geo(x) for x in unique_places}
-            df_expanded[["lat", "lon"]] = df_expanded["full_location"].apply(lambda x: pd.Series(locmap[x]))
-            df_expanded = df_expanded.dropna(subset=["lat","lon"])
 
-            # Calculate distance
-            df_expanded["distance"] = df_expanded.apply(lambda r: geodesic(cand, (r["lat"], r["lon"])).miles, axis=1)
-            df_near = df_expanded[df_expanded["distance"] <= radius].sort_values("distance")
+# Geocode location to latitude and longitude
+@st.cache_data(show_spinner=False)
+def geocode_location(city=None, state=None, zipcode=None):
+    geolocator = Nominatim(user_agent="keep_smiling_job_finder_app")
+    query = ""
+    if zipcode:
+        query = str(zipcode)
+    elif city and state:
+        query = f"{city}, {state}"
+    elif city:
+        query = city
+    elif state:
+        query = state
+    else:
+        return None
+    try:
+        location = geolocator.geocode(query)
+        if location:
+            return (location.latitude, location.longitude)
+        return None
+    except:
+        return None
 
-            if df_near.empty:
-                st.warning("⚠️ No jobs found within this range.")
-            else:
-                st.markdown(f"## ✨ {len(df_near)} Jobs Available Within {radius} Miles")
-                for i, r in df_near.iterrows():
-                    st.markdown(f"""
-                    <div style="background:#001F3F; border-radius:15px; padding:20px; margin-bottom:15px; color:white;">
-                        <h3>💼 {r.get('job_title','')} at {r.get('client','')}</h3>
-                        <p><b>📍 Location:</b> {r.get('location','')} | <b>Distance:</b> {r['distance']:.1f} miles</p>
-                        <details style="margin-top:10px;">
-                            <summary style="cursor:pointer; color:#00e6ff;"><b>View Details</b></summary>
-                            <div style="margin-top:10px;">
-                                {''.join([f"<p><b>{c.capitalize()}:</b> {r[c]}</p>" for c in df_expanded.columns if c not in ['lat','lon','distance','full_location']])}
-                            </div>
-                        </details>
-                    </div>
-                    """, unsafe_allow_html=True)
-else:
-    st.info("📥 Please upload a CSV file to begin searching.")
+
+# Calculate distance in miles between two lat/lon pairs
+def calculate_distance_miles(loc1, loc2):
+    try:
+        return geodesic(loc1, loc2).miles
+    except:
+        return None
+
+
+# Display interactive job cards
+def show_job_cards(jobs_df):
+    for i, row in jobs_df.iterrows():
+        client = row.get('Client', 'N/A')
+        job_title = row.get('Job_Title', 'N/A')
+        city = row.get('City', 'N/A')
+        distance = row.get('Distance', '?')
+
+        card_id = f"card{i}"
+
+        # Show collapsed card header
+        card_expanded = st.session_state.get(card_id, False)
+
+        def toggle_card(key=card_id):
+            st.session_state[key] = not st.session_state.get(key, False)
+
+        card_container = st.container()
+        with card_container:
+            header_html = f"""
+            <div class='job-card-header'>{client} - {job_title} - {city} - {distance:.1f} miles</div>
+            """
+            st.markdown(f"<div class='job-card' id='{card_id}' onclick='toggleCard()'>", unsafe_allow_html=True)
+            clicked = st.button('View Details' if not card_expanded else 'Hide Details', key=f"btn_{card_id}", on_click=toggle_card)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+            if card_expanded:
+                detail_text = ""
+                for col in jobs_df.columns:
+                    detail_text += f"{col}: {row[col]}\n"
+                st.markdown(f"<div class='job-card-details'>{detail_text}</div>", unsafe_allow_html=True)
+
+
+def main():
+    st.set_page_config(page_title="Keep Smiling Job Finder", layout='wide')
+    local_css()
+
+    # State to track if user has clicked start
+    if 'started' not in st.session_state:
+        st.session_state.started = False
+
+    # Welcome screen
+    if not st.session_state.started:
+        welcome_screen()
+        # Hacky workaround: detect button click via JS event
+        script = """
+            <script>
+            const btn = window.parent.document.querySelector('button.pulse-button');
+            btn.onclick = () => {
+                // Send message to Streamlit to change state
+                window.parent.postMessage({func:'startApp'}, '*');
+            }
+            </script>
+        """
+        st.markdown(script, unsafe_allow_html=True)
+        # Listen to message - not directly possible with Streamlit, so simulate via button
+        if st.button("Let's Start"):
+            st.session_state.started = True
+        return
+
+    # Main job search page
+    st.markdown('<div class="dark-theme">', unsafe_allow_html=True)
+    st.header("😊 Keep Smiling Job Finder")
+    st.subheader("Find your next opportunity closer to home 💼")
+
+    # CSV Upload
+    uploaded_file = st.file_uploader("Upload Job CSV File", type=["csv"])
+    if uploaded_file:
+        try:
+            df = pd.read_csv(uploaded_file)
+        except Exception as e:
+            st.error(f"Unable to read CSV file: {e}")
+            return
+
+        # Expand locations
+        df_expanded = expand_locations(df)
+
+        # Candidate inputs
+        with st.form("search_form"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                zipcode = st.text_input("ZIP Code (optional)").strip()
+            with col2:
+                city = st.text_input("City (optional)").strip()
+            with col3:
+                state = st.text_input("State (optional)").strip()
+
+            radius = st.slider("Search Radius (miles)", min_value=0, max_value=200, value=25)
+
+            submitted = st.form_submit_button("Find Jobs Near Me")
+            if submitted:
+                # Validate inputs
+                if not (zipcode or (city and state)):
+                    st.warning("Please enter either a ZIP code or both City and State for location search.")
+                else:
+                    # Geocode candidate location
+                    candidate_loc = geocode_location(city=city, state=state, zipcode=zipcode)
+                    if not candidate_loc:
+                        st.error("Could not determine your location from the inputs provided. Please check and try again.")
+                    else:
+                        # Geocode each job location and calculate distance
+                        distances = []
+                        for idx, job_row in df_expanded.iterrows():
+                            job_loc = geocode_location(city=job_row.get('City'), state=job_row.get('State'))
+                            if job_loc:
+                                dist = calculate_distance_miles(candidate_loc, job_loc)
+                            else:
+                                dist = np.nan
+                            distances.append(dist)
+                        df_expanded['Distance'] = distances
+
+                        # Filter by distance
+                        filtered_df = df_expanded[df_expanded['Distance'] <= radius].copy()
+                        if filtered_df.empty:
+                            st.info("No jobs found within the specified radius.")
+                        else:
+                            st.success(f"Found {len(filtered_df)} job(s) within {radius} miles.")
+                            show_job_cards(filtered_df)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    main()
