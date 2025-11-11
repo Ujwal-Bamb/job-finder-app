@@ -3,9 +3,6 @@ import pandas as pd
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
-# ------------------ Load Jobs ------------------
-jobs_df = pd.read_csv("your_jobs_data.csv")  # Ensure it has 'Job Title', 'Client Name', 'Job Location', etc.
-
 # ------------------ Geocoding ------------------
 @st.cache_data
 def geocode_location(location_str):
@@ -18,13 +15,7 @@ def geocode_location(location_str):
         return None
     return None
 
-# Pre-geocode all job locations (cached)
-@st.cache_data
-def geocode_jobs(df):
-    df['Job_LatLon'] = df['Job Location'].apply(lambda x: geocode_location(x))
-    return df.dropna(subset=['Job_LatLon']).reset_index(drop=True)
-
-# ------------------ Distance Calculation ------------------
+# ------------------ Distance ------------------
 def compute_distance(coord1, coord2):
     try:
         return geodesic(coord1, coord2).miles
@@ -34,6 +25,16 @@ def compute_distance(coord1, coord2):
 # ------------------ Streamlit UI ------------------
 st.header("😊 Welcome to the Job Board!")
 
+# Let user upload their CSV
+uploaded_file = st.file_uploader("Upload your jobs CSV", type=['csv'])
+if uploaded_file is None:
+    st.info("Please upload a CSV file to start searching for jobs.")
+    st.stop()
+
+# Read CSV
+jobs_df = pd.read_csv(uploaded_file)
+
+# Candidate input
 user_zip = st.text_input("Enter your ZIP code:")
 radius = st.slider("Select search radius (miles):", 10, 100, 25)
 search_btn = st.button("Find Jobs")
@@ -49,20 +50,22 @@ if search_btn:
             st.info("📍 Searching jobs near your location...")
             
             # Geocode jobs
-            jobs_df_geo = geocode_jobs(jobs_df)
+            jobs_df['Job_LatLon'] = jobs_df['Job Location'].apply(lambda x: geocode_location(x))
+            jobs_df = jobs_df.dropna(subset=['Job_LatLon']).reset_index(drop=True)
 
-            # Compute distances
-            jobs_df_geo['Distance'] = jobs_df_geo['Job_LatLon'].apply(lambda x: compute_distance(user_coords, x))
-
-            # Filter by radius
-            filtered_jobs = jobs_df_geo[jobs_df_geo['Distance'] <= radius].sort_values('Distance')
-
-            if filtered_jobs.empty:
-                st.warning(f"No jobs found within {radius} miles.")
+            if jobs_df.empty:
+                st.warning("No valid job locations found in the CSV.")
             else:
-                st.success(f"Found {len(filtered_jobs)} job(s) within {radius} miles!")
-                for idx, job in filtered_jobs.iterrows():
-                    with st.expander(f"{job['Job Title']} ({job['Job Location']}) — {job['Distance']:.1f} mi"):
-                        st.write(f"**Client:** {job['Client Name']}")
-                        st.write(f"**Agenda:** {job.get('Agenda','N/A')}")
-                        st.write(f"**Language:** {job.get('Language','N/A')}")
+                # Compute distances
+                jobs_df['Distance'] = jobs_df['Job_LatLon'].apply(lambda x: compute_distance(user_coords, x))
+                filtered_jobs = jobs_df[jobs_df['Distance'] <= radius].sort_values('Distance')
+
+                if filtered_jobs.empty:
+                    st.warning(f"No jobs found within {radius} miles.")
+                else:
+                    st.success(f"Found {len(filtered_jobs)} job(s) within {radius} miles!")
+                    for idx, job in filtered_jobs.iterrows():
+                        with st.expander(f"{job['Job Title']} ({job['Job Location']}) — {job['Distance']:.1f} mi"):
+                            st.write(f"**Client:** {job['Client Name']}")
+                            st.write(f"**Agenda:** {job.get('Agenda','N/A')}")
+                            st.write(f"**Language:** {job.get('Language','N/A')}")
