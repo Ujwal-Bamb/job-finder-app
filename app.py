@@ -88,11 +88,12 @@ if st.session_state.page == "welcome":
         <div class="big-btn">
     """, unsafe_allow_html=True)
 
+    # ✅ Centered “Let’s Start” button
+    st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
     if st.button("🚀 Let's Start", key="start-main"):
         st.session_state.page = "main"
         st.rerun()
-
-    st.markdown("</div></div>", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ----------- Main App Page -----------
 elif st.session_state.page == "main":
