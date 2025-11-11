@@ -17,9 +17,6 @@ st.markdown("""
         background: linear-gradient(135deg, #e0f2ff, #f5f7ff);
         font-family: 'Segoe UI', sans-serif;
     }
-    h1, h2, h3, h4 {
-        color: #1e3a8a;
-    }
     .welcome-box {
         text-align: center;
         padding: 80px 20px;
@@ -38,21 +35,6 @@ st.markdown("""
         font-size: 1.1rem;
         color: #475569;
         margin-top: 10px;
-    }
-    .welcome-btn {
-        margin-top: 40px;
-        padding: 0.8em 2.5em;
-        border: none;
-        border-radius: 12px;
-        background: linear-gradient(90deg, #2563eb, #1d4ed8);
-        color: white;
-        font-size: 1.1rem;
-        cursor: pointer;
-        transition: all 0.2s ease-in-out;
-    }
-    .welcome-btn:hover {
-        transform: scale(1.05);
-        background: linear-gradient(90deg, #1d4ed8, #1e40af);
     }
     .section {
         background-color: white;
@@ -83,6 +65,7 @@ st.markdown("""
     .center-btn {
         display: flex;
         justify-content: center;
+        margin-top: 40px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -100,15 +83,15 @@ if st.session_state.page == "welcome":
                 Find your dream job closer to home — smart, fast, and beautifully simple.<br>
                 Upload your job listings, choose your location, and explore opportunities nearby!
             </div>
-            <form action="#" method="post">
-                <button class="welcome-btn" type="submit" formaction="?start=1">🚀 Let's Start</button>
-            </form>
         </div>
     """, unsafe_allow_html=True)
 
-    if "start" in st.query_params:
-        st.session_state.page = "main"
-        st.rerun()
+    # Use Streamlit native button (no HTML form)
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        if st.button("🚀 Let's Start"):
+            st.session_state.page = "main"
+            st.rerun()
 
 # ------------------ Main App Page ------------------
 elif st.session_state.page == "main":
@@ -201,7 +184,7 @@ elif st.session_state.page == "main":
                     st.error("ZIP not found in California.")
 
         st.markdown('<div class="center-btn">', unsafe_allow_html=True)
-        search_btn = st.button("🚀 Find Jobs", use_container_width=False)
+        search_btn = st.button("🔍 Find Jobs")
         st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
