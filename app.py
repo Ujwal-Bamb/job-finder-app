@@ -21,10 +21,46 @@ h1, h2, h3 {
     font-weight: 700;
 }
 
-/* Center Utility */
+/* Centering Utility */
 .center {
     text-align: center;
 }
+
+# ---------- Welcome Page ----------
+if st.session_state.page == "welcome":
+    st.markdown("""
+    <div id="welcome-container">
+        <h1>😊 Keep Smiling Job Finder</h1>
+        <h3>💼 Find your next job closer to home</h3>
+        <img src="https://media.giphy.com/media/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="260" style="border-radius:12px; margin:25px 0;">
+        <p style="font-size:18px; color:#1e293b;">Upload your job list and discover nearby opportunities instantly!</p>
+        <div style="margin-top:30px;">
+            <form action="#" method="get" style="display:flex; justify-content:center;">
+                <button type="submit" style="
+                    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+                    color: white;
+                    border: none;
+                    border-radius: 10px;
+                    padding: 14px 34px;
+                    font-size: 22px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    box-shadow: 0 4px 10px rgba(37,99,235,0.3);
+                    transition: all 0.3s ease-in-out;
+                "
+                onmouseover="this.style.transform='scale(1.08)'"
+                onmouseout="this.style.transform='scale(1)'">
+                    🚀 Let's Start
+                </button>
+            </form>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.button("🚀 Let's Start", key="start_hidden"):
+        st.session_state.page = "main"
+        st.rerun()
+
 
 /* ---------- Expander Cards ---------- */
 div[data-testid="stExpander"] {
@@ -50,7 +86,7 @@ div[data-testid="stExpander"] p {
     color: #1e293b;
 }
 
-/* ---------- Job Card ---------- */
+/* ---------- Job Card Content ---------- */
 .job-card {
     background: white;
     border-radius: 12px;
@@ -76,42 +112,20 @@ if "page" not in st.session_state:
 # ---------- Welcome Page ----------
 if st.session_state.page == "welcome":
     st.markdown("""
-    <div style='display:flex; flex-direction:column; align-items:center; justify-content:center; height:85vh; text-align:center;'>
+    <div id="welcome-container">
         <h1>😊 Keep Smiling Job Finder</h1>
         <h3>💼 Find your next job closer to home</h3>
         <img src="https://media.giphy.com/media/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="260" style="border-radius:12px; margin:25px 0;">
         <p style="font-size:18px; color:#1e293b;">Upload your job list and discover nearby opportunities instantly!</p>
-        <div style="margin-top:40px;">
-            <button id="start-btn">🚀 Let's Start</button>
-        </div>
     </div>
-
-    <style>
-    #start-btn {
-        background: linear-gradient(135deg, #2563eb, #1d4ed8);
-        color: white;
-        border: none;
-        border-radius: 10px;
-        padding: 14px 34px;
-        font-size: 22px;
-        font-weight: 600;
-        cursor: pointer;
-        box-shadow: 0 4px 10px rgba(37,99,235,0.3);
-        transition: all 0.3s ease-in-out;
-    }
-    #start-btn:hover {
-        transform: scale(1.08);
-        background: linear-gradient(135deg, #1d4ed8, #2563eb);
-    }
-    </style>
     """, unsafe_allow_html=True)
 
-    # Invisible Streamlit button for logic
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        if st.button("🚀 Let's Start", key="start_hidden", use_container_width=True):
-            st.session_state.page = "main"
-            st.rerun()
+    # Centered button using columns
+    st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
+    if st.button("🚀 Let's Start", key="start", use_container_width=False):
+        st.session_state.page = "main"
+        st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------- Main App ----------
 elif st.session_state.page == "main":
@@ -166,8 +180,12 @@ elif st.session_state.page == "main":
         st.error("❌ Missing required column: 'location'")
         st.stop()
 
+    # Detect client column automatically
     client_col = next((c for c in jobs.columns if 'client' in c), None)
-    jobs['client'] = jobs[client_col] if client_col else "Unknown Client"
+    if client_col:
+        jobs['client'] = jobs[client_col]
+    else:
+        jobs['client'] = "Unknown Client"
 
     # ---------- Search ----------
     st.markdown("### 🔍 Search Jobs Near You")
