@@ -47,25 +47,10 @@ st.markdown("""
             from {opacity: 0;}
             to {opacity: 1;}
         }
-        .glow-button {
-            font-size:18px;
-            padding:10px 25px;
-            border:none;
-            color:white;
-            background:linear-gradient(45deg,#23a6d5,#23d5ab);
-            border-radius:12px;
-            cursor:pointer;
-            box-shadow:0 0 15px #23a6d5;
-            transition:all 0.3s ease;
-        }
-        .glow-button:hover {
-            box-shadow:0 0 25px #23d5ab;
-            transform:scale(1.05);
-        }
     </style>
 """, unsafe_allow_html=True)
 
-# ---------------------- ANIMATED INTRO ----------------------
+# ---------------------- INTRO ANIMATION ----------------------
 if "show_main" not in st.session_state:
     st.session_state.show_main = False
 
@@ -84,7 +69,6 @@ if not st.session_state.show_main:
 st.title("🌍 Find Nearby Jobs")
 st.markdown("Upload your job list, enter candidate location, and find nearby opportunities instantly!")
 
-# -------- Step 1: Upload CSV --------
 uploaded_file = st.file_uploader("📂 Upload Job CSV (columns: Client, City, State, Gender, Language, Job_Title, etc.)", type=["csv"])
 
 if uploaded_file is not None:
@@ -92,7 +76,6 @@ if uploaded_file is not None:
     df.columns = df.columns.str.strip().str.lower()
     st.success(f"✅ Successfully loaded {len(df)} job entries!")
 
-    # -------- Step 2: Candidate Location Input --------
     st.subheader("📍 Candidate Location")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -109,86 +92,103 @@ if uploaded_file is not None:
 
     @st.cache_data(show_spinner=False)
     def get_lat_lon(place):
-        """Cached geocoding for speed."""
+        """Cached geocoding with improved fallback."""
         try:
-            loc = geolocator.geocode(f"{place}, USA", timeout=5)
+            loc = geolocator.geocode(f"{place}, USA", timeout=10)
             if loc:
                 return loc.latitude, loc.longitude
-        except:
+        except Exception:
             return None, None
         return None, None
 
+    # ---------------------- WHEN USER CLICKS FIND ----------------------
     if find_button:
-        with st.spinner("🕵️ Finding nearby jobs..."):
-
-            # Step 3: Determine candidate coordinates
+        with st.spinner("🕵️ Finding nearby jobs... Please wait..."):
+            # Determine candidate location
             candidate_coords = None
             if zip_code:
-                candidate_coords = get_lat_lon(zip_code)
-            if not candidate_coords or None in candidate_coords:
+                candidate_coords = get_lat_lon(str(zip_code))
+            if (not candidate_coords) or (None in candidate_coords):
                 if city and state:
                     candidate_coords = get_lat_lon(f"{city}, {state}")
-            if not candidate_coords or None in candidate_coords:
-                st.error("❌ Invalid ZIP or City/State. Please try again.")
+            if (not candidate_coords) or (None in candidate_coords):
+                st.error("❌ Could not find location for given ZIP/City/State. Please check.")
                 st.stop()
 
-            # Step 4: Geocode job locations (fast caching)
+            # Geocode job locations
             df["full_location"] = df.apply(lambda r: f"{r.get('city','')}, {r.get('state','')}", axis=1)
-            unique_locations = df["full_location"].unique()
-            loc_dict = {loc: get_lat_lon(loc) for loc in unique_locations}
-            df[["latitude", "longitude"]] = df["full_location"].apply(lambda x: pd.Series(loc_dict[x]))
+            unique_locs = df["full_location"].unique()
+            loc_map = {loc: get_lat_lon(loc) for loc in unique_locs}
+            df[["latitude", "longitude"]] = df["full_location"].apply(lambda x: pd.Series(loc_map[x]))
 
-            # Step 5: Compute distances
+            # Calculate distance
             df["distance_miles"] = df.apply(
                 lambda r: geodesic(candidate_coords, (r["latitude"], r["longitude"])).miles
-                if pd.notnull(r["latitude"]) and pd.notnull(r["longitude"]) else None,
-                axis=1,
+                if pd.notnull(r["latitude"]) and pd.notnull(r["longitude"]) else None, axis=1
             )
 
-            # Step 6: Filter nearby jobs
-            nearby_jobs = df[df["distance_miles"] <= radius].dropna(subset=["latitude", "longitude"])
+            nearby = df[df["distance_miles"] <= radius].dropna(subset=["latitude", "longitude"])
 
-            if nearby_jobs.empty:
+            if nearby.empty:
                 st.warning("⚠️ No jobs found within that distance.")
             else:
-                st.success(f"✅ Found {len(nearby_jobs)} job(s) within {radius} miles!")
+                st.session_state["search_results"] = nearby
+                st.session_state["candidate_coords"] = candidate_coords
 
-                # Step 7: Select job to view details
-                job_list = nearby_jobs.reset_index(drop=True)
-                selected_job = st.selectbox(
-                    "🧾 Select a job to view details:",
-                    [f"{row['client']} - {row.get('job_title','N/A')} ({round(row['distance_miles'],1)} mi)"
-                     for _, row in job_list.iterrows()],
-                )
+# ---------------------- DISPLAY RESULTS (PERSISTENT) ----------------------
+if "search_results" in st.session_state:
+    nearby = st.session_state["search_results"]
+    candidate_coords = st.session_state["candidate_coords"]
 
-                if selected_job:
-                    index = [f"{row['client']} - {row.get('job_title','N/A')} ({round(row['distance_miles'],1)} mi)"
-                             for _, row in job_list.iterrows()].index(selected_job)
-                    job = job_list.iloc[index]
+    st.success(f"✅ Found {len(nearby)} job(s) within your radius!")
 
-                    # Step 8: Show detailed job info
-                    st.subheader("📄 Job Details")
-                    st.markdown(f"""
-                    **Client:** {job.get('client','N/A')}  
-                    **Job Title:** {job.get('job_title','N/A')}  
-                    **City:** {job.get('city','N/A')}  
-                    **State:** {job.get('state','N/A')}  
-                    **Gender:** {job.get('gender','N/A')}  
-                    **Language:** {job.get('language','N/A')}  
-                    **Schedule:** {job.get('schedule','N/A')}  
-                    **Distance:** {round(job['distance_miles'],1)} miles
-                    """)
+    job_list = nearby.reset_index(drop=True)
+    selected_job = st.selectbox(
+        "🧾 Select a job to view details:",
+        [f"{row['client']} - {row.get('job_title','N/A')} ({round(row['distance_miles'],1)} mi)"
+         for _, row in job_list.iterrows()],
+    )
 
-                    # Step 9: Ask to show map
-                    if st.button("🗺️ Show Map for this Job"):
-                        m = folium.Map(location=candidate_coords, zoom_start=8)
-                        folium.Marker(candidate_coords, tooltip="Candidate", icon=folium.Icon(color="red")).add_to(m)
-                        folium.Marker(
-                            location=[job["latitude"], job["longitude"]],
-                            popup=f"{job['client']} - {job.get('job_title','N/A')}",
-                            icon=folium.Icon(color="blue", icon="briefcase", prefix="fa")
-                        ).add_to(m)
-                        st_folium(m, width=1200, height=600)
+    if selected_job:
+        idx = [f"{row['client']} - {row.get('job_title','N/A')} ({round(row['distance_miles'],1)} mi)"
+               for _, row in job_list.iterrows()].index(selected_job)
+        job = job_list.iloc[idx]
 
+        st.subheader("📄 Job Details")
+        st.markdown(f"""
+        **Client:** {job.get('client','N/A')}  
+        **Job Title:** {job.get('job_title','N/A')}  
+        **City:** {job.get('city','N/A')}  
+        **State:** {job.get('state','N/A')}  
+        **Gender:** {job.get('gender','N/A')}  
+        **Language:** {job.get('language','N/A')}  
+        **Schedule:** {job.get('schedule','N/A')}  
+        **Distance:** {round(job['distance_miles'],1)} miles
+        """)
+
+        col_map1, col_map2 = st.columns(2)
+        with col_map1:
+            if st.button("🗺️ Show Map for this Job"):
+                m = folium.Map(location=candidate_coords, zoom_start=8)
+                folium.Marker(candidate_coords, tooltip="Candidate", icon=folium.Icon(color="red")).add_to(m)
+                folium.Marker(
+                    location=[job["latitude"], job["longitude"]],
+                    popup=f"{job['client']} - {job.get('job_title','N/A')}",
+                    icon=folium.Icon(color="blue", icon="briefcase", prefix="fa")
+                ).add_to(m)
+                st_folium(m, width=1000, height=500)
+
+        with col_map2:
+            if st.button("🌎 View All Jobs on Map"):
+                m2 = folium.Map(location=candidate_coords, zoom_start=6)
+                folium.Marker(candidate_coords, tooltip="Candidate", icon=folium.Icon(color="red")).add_to(m2)
+                for _, r in job_list.iterrows():
+                    folium.Marker(
+                        [r["latitude"], r["longitude"]],
+                        tooltip=f"{r['client']} ({r['city']})",
+                        popup=f"{r['client']} - {r.get('job_title','N/A')}<br>{round(r['distance_miles'],1)} mi away",
+                        icon=folium.Icon(color="blue", icon="briefcase")
+                    ).add_to(m2)
+                st_folium(m2, width=1000, height=500)
 else:
-    st.info("📤 Please upload your CSV file to begin.")
+    st.info("📤 Upload your CSV and search to see results.")
