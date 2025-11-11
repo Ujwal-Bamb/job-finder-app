@@ -1,40 +1,68 @@
+import streamlit as st
 import pandas as pd
-jobs_df = pd.read_csv("your_jobs_data.csv")
 from geopy.geocoders import Nominatim
-geolocator = Nominatim(user_agent="job_board_app")
-location = geolocator.geocode("94501")  # Example ZIP
-lat, lon = location.latitude, location.longitude
 from geopy.distance import geodesic
 
-def distance_between(zip1, zip2):
-    loc1 = geolocator.geocode(zip1)
-    loc2 = geolocator.geocode(zip2)
-    coord1 = (loc1.latitude, loc1.longitude)
-    coord2 = (loc2.latitude, loc2.longitude)
-    return geodesic(coord1, coord2).miles
-jobs_df['match'] = jobs_df['Job Location'].apply(lambda loc: distance_between(user_zip, loc))
-filtered_jobs = jobs_df[jobs_df['match'] <= selected_radius]
-import streamlit as st
+# ------------------ Load Jobs ------------------
+jobs_df = pd.read_csv("your_jobs_data.csv")  # Ensure it has 'Job Title', 'Client Name', 'Job Location', etc.
 
+# ------------------ Geocoding ------------------
+@st.cache_data
+def geocode_location(location_str):
+    geolocator = Nominatim(user_agent="job_board_app")
+    try:
+        loc = geolocator.geocode(location_str)
+        if loc:
+            return (loc.latitude, loc.longitude)
+    except:
+        return None
+    return None
+
+# Pre-geocode all job locations (cached)
+@st.cache_data
+def geocode_jobs(df):
+    df['Job_LatLon'] = df['Job Location'].apply(lambda x: geocode_location(x))
+    return df.dropna(subset=['Job_LatLon']).reset_index(drop=True)
+
+# ------------------ Distance Calculation ------------------
+def compute_distance(coord1, coord2):
+    try:
+        return geodesic(coord1, coord2).miles
+    except:
+        return None
+
+# ------------------ Streamlit UI ------------------
 st.header("😊 Welcome to the Job Board!")
 
 user_zip = st.text_input("Enter your ZIP code:")
 radius = st.slider("Select search radius (miles):", 10, 100, 25)
+search_btn = st.button("Find Jobs")
 
-if user_zip:
-    # geocode user ZIP
-    user_location = geolocator.geocode(user_zip)
-    if user_location:
-        # filter jobs
-        filtered_jobs = filter_jobs(user_location, radius, jobs_df)  # define this function
-        if not filtered_jobs.empty:
-            for idx, job in filtered_jobs.iterrows():
-                with st.expander(job['Job Title']):
-                    st.write(f"**Client:** {job['Client Name']}")
-                    st.write(f"**Location:** {job['Job Location']}")
-                    st.write(f"**Agenda:** {job['Agenda']}")
-                    st.write(f"**Language:** {job['Language']}")
-        else:
-            st.write(f"No jobs found within {radius} miles — try increasing your search radius!")
+if search_btn:
+    if not user_zip.strip():
+        st.error("Please enter a valid ZIP code.")
     else:
-        st.error("Invalid ZIP code entered.")
+        user_coords = geocode_location(user_zip)
+        if not user_coords:
+            st.error("Invalid ZIP code entered. Please try again.")
+        else:
+            st.info("📍 Searching jobs near your location...")
+            
+            # Geocode jobs
+            jobs_df_geo = geocode_jobs(jobs_df)
+
+            # Compute distances
+            jobs_df_geo['Distance'] = jobs_df_geo['Job_LatLon'].apply(lambda x: compute_distance(user_coords, x))
+
+            # Filter by radius
+            filtered_jobs = jobs_df_geo[jobs_df_geo['Distance'] <= radius].sort_values('Distance')
+
+            if filtered_jobs.empty:
+                st.warning(f"No jobs found within {radius} miles.")
+            else:
+                st.success(f"Found {len(filtered_jobs)} job(s) within {radius} miles!")
+                for idx, job in filtered_jobs.iterrows():
+                    with st.expander(f"{job['Job Title']} ({job['Job Location']}) — {job['Distance']:.1f} mi"):
+                        st.write(f"**Client:** {job['Client Name']}")
+                        st.write(f"**Agenda:** {job.get('Agenda','N/A')}")
+                        st.write(f"**Language:** {job.get('Language','N/A')}")
