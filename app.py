@@ -33,19 +33,21 @@ h1, h2, h3 {
     justify-content: center;
     align-items: center;
     height: 80vh;
+    text-align: center;
 }
 #welcome-container button {
     background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
     color: white !important;
     border-radius: 10px !important;
-    padding: 12px 30px !important;
-    font-size: 20px !important;
+    padding: 14px 34px !important;
+    font-size: 22px !important;
     font-weight: 600 !important;
     transition: all 0.3s ease-in-out;
+    box-shadow: 0 4px 10px rgba(37,99,235,0.3);
 }
 #welcome-container button:hover {
     background: linear-gradient(135deg, #1d4ed8, #2563eb) !important;
-    transform: scale(1.05);
+    transform: scale(1.08);
 }
 
 /* ---------- Expander Cards ---------- */
@@ -103,14 +105,14 @@ if st.session_state.page == "welcome":
         <h3>💼 Find your next job closer to home</h3>
         <img src="https://media.giphy.com/media/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="260" style="border-radius:12px; margin:25px 0;">
         <p style="font-size:18px; color:#1e293b;">Upload your job list and discover nearby opportunities instantly!</p>
+    </div>
     """, unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        if st.button("🚀 Let's Start", use_container_width=True):
-            st.session_state.page = "main"
-            st.rerun()
-
+    # Centered button using columns
+    st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
+    if st.button("🚀 Let's Start", key="start", use_container_width=False):
+        st.session_state.page = "main"
+        st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------- Main App ----------
@@ -128,7 +130,7 @@ elif st.session_state.page == "main":
             cities[str(row['city']).strip().lower()] = (row['lat'], row['lng'])
             if pd.notna(row.get('zips', None)):
                 for z in str(row['zips']).split():
-                    zips[z] = (row['lat'], row['lng'])
+                    zips[z.strip()] = (row['lat'], row['lng'])
         return cities, zips
 
     CA_CITIES, ZIP_COORDS = load_ca_data()
@@ -153,17 +155,25 @@ elif st.session_state.page == "main":
 
     # ---------- Upload CSV ----------
     st.markdown("### 📂 Upload Job List")
-    file = st.file_uploader("Upload your CSV (columns: client, location, language, pay rate, schedule)", type=["csv"])
+    file = st.file_uploader("Upload your CSV (columns like: client_name, location, language, pay rate, schedule)", type=["csv"])
 
     if not file:
         st.info("Please upload a CSV to continue.")
         st.stop()
 
     jobs = pd.read_csv(file)
-    jobs.columns = jobs.columns.str.lower().str.strip()
+    jobs.columns = jobs.columns.str.lower().str.strip().str.replace(" ", "_")
+
     if 'location' not in jobs.columns:
         st.error("❌ Missing required column: 'location'")
         st.stop()
+
+    # Detect client column automatically
+    client_col = next((c for c in jobs.columns if 'client' in c), None)
+    if client_col:
+        jobs['client'] = jobs[client_col]
+    else:
+        jobs['client'] = "Unknown Client"
 
     # ---------- Search ----------
     st.markdown("### 🔍 Search Jobs Near You")
@@ -171,20 +181,16 @@ elif st.session_state.page == "main":
     with col1:
         search_type = st.radio("Search by", ["City", "ZIP Code"], horizontal=True)
     with col2:
-        query = st.text_input("Enter City or ZIP", "")
+        query = st.text_input("Enter City or ZIP", "").strip()
     with col3:
         radius = st.slider("Radius (miles)", 1, 100, 25)
 
     if st.button("🔎 Find Jobs", use_container_width=True):
-        if not query.strip():
+        if not query:
             st.warning("Please enter a city or ZIP code.")
             st.stop()
 
-        if search_type == "ZIP Code":
-            user_coords = ZIP_COORDS.get(query.strip())
-        else:
-            user_coords = get_coords(query)
-
+        user_coords = ZIP_COORDS.get(query) if search_type == "ZIP Code" else get_coords(query)
         if not user_coords:
             st.error("⚠️ Could not find that city or ZIP in California.")
             st.stop()
@@ -213,7 +219,7 @@ elif st.session_state.page == "main":
                         <p><b>📏 Distance:</b> {dist:.1f} miles</p>
                         <p><b>👥 Positions:</b> {row.get('positions', 'N/A')}</p>
                         <p><b>🗣️ Language:</b> {row.get('language', 'N/A')}</p>
-                        <p><b>💰 Pay Rate:</b> {row.get('pay rate', 'N/A')}</p>
+                        <p><b>💰 Pay Rate:</b> {row.get('pay_rate', 'N/A')}</p>
                         <p><b>🕒 Schedule:</b> {row.get('schedule', 'N/A')}</p>
                     </div>
                     """, unsafe_allow_html=True)
