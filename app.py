@@ -3,8 +3,8 @@ import streamlit as st
 import pandas as pd
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
-import time
 import ast
+from uszipcode import SearchEngine
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(page_title="😊 Keep Smiling Job Finder", layout="wide")
@@ -12,65 +12,71 @@ st.set_page_config(page_title="😊 Keep Smiling Job Finder", layout="wide")
 # ---------------- WELCOME SCREEN ----------------
 st.markdown("""
 <style>
-body {
-  margin:0;
-  padding:0;
-}
-.welcome-page {
+/* Full screen animated background */
+.welcome-screen {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
   height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg,#ff7eb3,#ff758c,#ff7e5f,#feb47b);
-  background-size: 400% 400%;
-  animation: gradientBG 8s ease infinite;
   flex-direction: column;
+  background: linear-gradient(135deg, #11998e, #38ef7d, #ff758c, #ff7eb3);
+  background-size: 400% 400%;
+  animation: gradientBG 10s ease infinite;
   text-align: center;
+  z-index: 9999;
 }
 @keyframes gradientBG {
   0% {background-position:0% 50%;}
   50% {background-position:100% 50%;}
   100% {background-position:0% 50%;}
 }
+
+/* Title text */
 .title {
-  font-size: 64px;
+  font-size: 72px;
   font-weight: 900;
-  background: linear-gradient(to right, #fff200, #ff6a00);
+  background: linear-gradient(to right,#fff200,#ff6a00);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 20px #fffa65, 0 0 40px #ff6a00;
+  text-shadow: 0 0 20px #fff200,0 0 40px #ff6a00;
+  margin-bottom: 20px;
   animation: fadeIn 2s ease-in-out forwards;
 }
+
+/* Subtitle */
 .subtitle {
   font-size: 28px;
-  color: #fff8e1;
-  margin-top: 10px;
-  opacity: 0;
-  animation: fadeInSub 2s forwards;
+  color: #ffffffcc;
+  margin-bottom: 40px;
+  animation: fadeIn 3s ease-in-out forwards;
 }
-@keyframes fadeIn {
-  from {opacity:0; transform: scale(0.95);}
-  to {opacity:1; transform: scale(1);}
-}
-@keyframes fadeInSub {
-  from {opacity:0;}
-  to {opacity:0.9;}
-}
+
+/* Pulse button */
 .start-btn {
-  margin-top: 40px;
-  padding: 15px 50px;
-  font-size: 24px;
+  padding: 18px 60px;
+  font-size: 26px;
   font-weight: bold;
-  border-radius: 30px;
+  border-radius: 40px;
   border: none;
   background: #ff6a00;
   color: white;
   cursor: pointer;
   animation: pulse 1.5s infinite alternate;
+  box-shadow: 0 0 20px #ff6a00, 0 0 40px #ffb347;
+}
+.start-btn:hover {
+  transform: scale(1.1);
 }
 @keyframes pulse {
   from {transform: scale(1);}
   to {transform: scale(1.1);}
+}
+@keyframes fadeIn {
+  from {opacity:0; transform: scale(0.95);}
+  to {opacity:1; transform: scale(1);}
 }
 </style>
 """, unsafe_allow_html=True)
@@ -80,13 +86,13 @@ if "main_page" not in st.session_state:
 
 if not st.session_state.main_page:
     st.markdown("""
-    <div class="welcome-page">
+    <div class="welcome-screen">
         <h1 class="title">😊 Keep Smiling Job Finder</h1>
         <h3 class="subtitle">Find your next opportunity closer to home 💼</h3>
     </div>
     """, unsafe_allow_html=True)
-    start = st.button("🚀 Let's Start")
-    if start:
+
+    if st.button("🚀 Let's Start"):
         st.session_state.main_page = True
         st.experimental_rerun()
     st.stop()
@@ -116,8 +122,9 @@ if uploaded:
     find = st.button("🔍 Find Jobs Near Me", use_container_width=True)
 
     geolocator = Nominatim(user_agent="job_locator")
+    search = SearchEngine(simple_zipcode=True)  # US ZIP lookup
 
-    # ---------------- HELPER FUNCTION ----------------
+    # ---------------- HELPER FUNCTIONS ----------------
     @st.cache_data(show_spinner=False)
     def geo(place):
         try:
@@ -128,13 +135,19 @@ if uploaded:
             return None, None
         return None, None
 
-    # ---------------- EXPAND MULTIPLE LOCATIONS ----------------
+    def get_lat_lon_zip(zip_code):
+        result = search.by_zipcode(zip_code)
+        if result and result.lat is not None and result.lng is not None:
+            return result.lat, result.lng
+        return None, None
+
+    # ---------------- SEARCH JOBS ----------------
     if find:
         with st.spinner("📍 Locating jobs near you..."):
             # Candidate location
             cand = None
             if zip_code:
-                cand = geo(str(zip_code))
+                cand = get_lat_lon_zip(str(zip_code))
             if (not cand) or (None in cand):
                 if city and state:
                     cand = geo(f"{city}, {state}")
