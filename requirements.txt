@@ -4,3 +4,5 @@ geopy
 folium
 pydeck
 streamlit-folium
+numpy
+uszipcode
