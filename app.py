@@ -113,5 +113,61 @@ if uploaded_file:
                 st.stop()
             candidate_coord = ZIP_TO_COORD[candidate_zip]
 
+        # ✅ FIXED INDENTATION BLOCK
         with st.spinner("Finding nearby jobs..."):
-            # Map job
+            # Map job locations to coordinates using fuzzy matching
+            jobs_df['Job_Coords'] = jobs_df['location'].apply(fuzzy_city_lookup)
+
+            # Inform user if any jobs missing valid city mapping
+            missing_coords_jobs = jobs_df[jobs_df['Job_Coords'].isna()]
+            if not missing_coords_jobs.empty:
+                st.warning(f"{len(missing_coords_jobs)} job(s) were ignored due to unrecognized city names.")
+
+            # Drop jobs with unknown coordinates
+            jobs_df = jobs_df.dropna(subset=['Job_Coords']).reset_index(drop=True)
+
+            # Compute distances
+            jobs_df['Distance'] = jobs_df['Job_Coords'].apply(lambda x: haversine_miles(candidate_coord, x))
+
+            # Filter by radius
+            filtered_jobs = jobs_df[jobs_df['Distance'] <= search_radius].sort_values('Distance').reset_index(drop=True)
+
+        # ✅ Everything below runs after the 'with' block
+        if filtered_jobs.empty:
+            st.warning(f"No jobs found within {search_radius} miles of your location.")
+        else:
+            st.success(f"🎯 Found {len(filtered_jobs)} job(s) within {search_radius} miles!")
+
+            # Show summary stats
+            st.metric("Closest Job (miles)", f"{filtered_jobs['Distance'].min():.1f}")
+            st.metric("Farthest Job (miles)", f"{filtered_jobs['Distance'].max():.1f}")
+
+            # Display jobs
+            for _, row in filtered_jobs.iterrows():
+                schedule = row.get('schedule', '')
+                language = row.get('language', '')
+                gender = row.get('gender', '')
+
+                # Clean field strings
+                schedule_str = f"Schedule: {schedule}" if schedule else ""
+                language_str = f"Language: {language}" if language else ""
+                gender_str = f"Gender: {gender}" if gender else ""
+
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #6a11cb, #2575fc);
+                            border-radius:12px; padding:15px; margin:10px 0; color:white;">
+                    <b>{row.get('client_name', 'Unknown Client')} - {row.get('job_title', 'Job')}</b><br>
+                    {row['location']} — {row['Distance']:.1f} mi<br>
+                    {schedule_str}<br>
+                    {language_str}<br>
+                    {gender_str}
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Map plot
+            map_data = pd.DataFrame(filtered_jobs['Job_Coords'].tolist(), columns=['lat', 'lon'])
+            map_data['job_title'] = filtered_jobs.get('job_title', '')
+            st.map(map_data)
+
+else:
+    st.info("📄 Upload a CSV file with job listings to start searching.")
