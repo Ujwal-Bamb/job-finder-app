@@ -80,20 +80,41 @@ if "page" not in st.session_state:
 # ----------- Welcome Page -----------
 if st.session_state.page == "welcome":
     st.markdown("""
-    <div class="center-welcome">
-        <h1>😊 Keep Smiling Job Finder</h1>
-        <h3>💼 Find your next job closer to home</h3>
-        <img src="https://media.giphy.com/media/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="260" style="border-radius:12px; margin:25px 0;">
-        <p style="font-size:18px; color:#1e293b;">Upload your job list and discover nearby opportunities instantly!</p>
-        <div class="big-btn">
+    <style>
+    .stApp {
+        background: linear-gradient(135deg, #e0f2ff, #f5f7ff);
+        font-family: 'Segoe UI', sans-serif;
+    }
+    </style>
     """, unsafe_allow_html=True)
 
-    # ✅ Centered button — fixed indentation
-    st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
-    if st.button("🚀 Let's Start", key="start-main"):
-        st.session_state.page = "main"
-        st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Vertical space above content
+    st.write("")
+    st.write("")  # Add more st.write() or st.markdown("<br>") for more vertical spacing if needed
+
+    # Centered header and image
+    st.markdown(
+        """
+        <div style="text-align:center">
+            <h1>😊 Keep Smiling Job Finder</h1>
+            <h3>💼 Find your next job closer to home</h3>
+            <img src="https://media.giphy.com/media/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="260" style="border-radius:12px; margin:25px 0;">
+            <p style="font-size:18px; color:#1e293b;">
+                Upload your job list and discover nearby opportunities instantly!
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Center the button using columns (the only reliable approach!)
+    col1, col2, col3 = st.columns([1,2,1])
+    with col2:
+        # This button will be centered
+        if st.button("🚀 Let's Start", key="start-main"):
+            st.session_state.page = "main"
+            st.rerun()
+
 
 # ----------- Main App Page -----------
 elif st.session_state.page == "main":
