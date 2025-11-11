@@ -6,53 +6,63 @@ from difflib import get_close_matches
 # ---------- Streamlit Setup ----------
 st.set_page_config(page_title="Keep Smiling Job Finder", layout="wide", page_icon="😊")
 
-# ---------- CSS Styling ----------
+# ---------- Custom CSS ----------
 st.markdown("""
 <style>
+/* Global page */
 .stApp {
-    background: linear-gradient(135deg, #f0f7ff 0%, #ffffff 100%);
+    background: linear-gradient(135deg, #e0f2ff, #ffffff);
     font-family: 'Segoe UI', sans-serif;
-    color: #1e293b;
 }
+
+/* Titles */
 h1, h2, h3 {
     color: #1e3a8a;
     font-weight: 700;
 }
-.section {
-    background: white;
-    padding: 24px;
-    border-radius: 16px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-    margin-bottom: 20px;
-}
+
+/* Welcome section */
 .center {
     text-align: center;
 }
-.job-expander > div {
-    background-color: #f8fafc !important;
-    border-radius: 10px;
-    border: 1px solid #e2e8f0 !important;
-}
-div[data-testid="stExpander"] div[role="button"] p {
-    font-size: 18px;
-    font-weight: 600;
-    color: #1e3a8a;
-}
-div[data-testid="stExpander"] svg {
-    color: #2563eb !important;
-}
+
 button[kind="primary"] {
-    background: linear-gradient(135deg, #2563eb, #1e40af) !important;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
     color: white !important;
-    border-radius: 8px !important;
+    border-radius: 10px !important;
+    padding: 10px 24px !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
 }
 button[kind="primary"]:hover {
-    background: linear-gradient(135deg, #1e40af, #2563eb) !important;
+    background: linear-gradient(135deg, #1d4ed8, #2563eb) !important;
+}
+
+/* Expander customization */
+div[data-testid="stExpander"] {
+    background: linear-gradient(145deg, #e6f0ff, #ffffff);
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(37,99,235,0.1);
+    margin-bottom: 10px;
+}
+div[data-testid="stExpander"] div[role="button"] {
+    background: linear-gradient(135deg, #60a5fa, #3b82f6);
+    border-radius: 12px;
+    color: white !important;
+    font-weight: 600;
+    padding: 10px 16px !important;
+}
+div[data-testid="stExpander"] svg {
+    color: white !important;
+}
+div[data-testid="stExpander"] p {
+    color: #1e293b;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- State ----------
+# ---------- State Management ----------
 if "page" not in st.session_state:
     st.session_state.page = "welcome"
 
@@ -62,13 +72,14 @@ if st.session_state.page == "welcome":
     st.markdown("<h3 class='center'>💼 Find your next job closer to home</h3>", unsafe_allow_html=True)
 
     st.markdown("""
-    <div style='text-align:center; margin-top:40px;'>
+    <div style='text-align:center; margin-top:50px;'>
         <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcmY4OHd3bWFuNGY2ZzB6bnRqZDUxaTV2c3oxdm5ybGpnM3p4bHR0aCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="280" style="border-radius:12px;">
-        <p style='margin-top:20px; font-size:18px;'>Upload your job list and find openings near you quickly and easily.</p>
+        <p style='font-size:18px; margin-top:20px;'>Upload your job list and discover opportunities near you with ease!</p>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<div class='center'>", unsafe_allow_html=True)
+    # Centered button
+    st.markdown("<div style='display:flex; justify-content:center; margin-top:40px;'>", unsafe_allow_html=True)
     if st.button("🚀 Let's Start", use_container_width=False):
         st.session_state.page = "main"
         st.rerun()
@@ -76,11 +87,10 @@ if st.session_state.page == "welcome":
 
 # ---------- Main Job Finder Page ----------
 elif st.session_state.page == "main":
-
     st.title("😊 Keep Smiling Job Finder")
     st.write("Search caregiver job listings by city or ZIP code in California.")
 
-    # ---------- Load City Data ----------
+    # ---------- Load California Data ----------
     @st.cache_data(show_spinner=False)
     def load_ca_data():
         url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/california_cities_minimal.csv"
@@ -115,7 +125,7 @@ elif st.session_state.page == "main":
 
     # ---------- Upload CSV ----------
     st.markdown("### 📂 Upload Job List")
-    file = st.file_uploader("Upload your CSV file (columns: client, location, language, pay rate, schedule)", type=["csv"])
+    file = st.file_uploader("Upload your CSV (columns: client, location, language, pay rate, schedule)", type=["csv"])
 
     if not file:
         st.info("Please upload a CSV to continue.")
@@ -123,12 +133,11 @@ elif st.session_state.page == "main":
 
     jobs = pd.read_csv(file)
     jobs.columns = jobs.columns.str.lower().str.strip()
-
     if 'location' not in jobs.columns:
         st.error("❌ Missing required column: 'location'")
         st.stop()
 
-    # ---------- Search Inputs ----------
+    # ---------- Search Controls ----------
     st.markdown("### 🔍 Search Jobs Near You")
 
     col1, col2, col3 = st.columns([2, 2, 1])
@@ -139,13 +148,12 @@ elif st.session_state.page == "main":
     with col3:
         radius = st.slider("Radius (miles)", 1, 100, 25)
 
-    # ---------- Search Button ----------
+    # ---------- Find Jobs ----------
     if st.button("🔎 Find Jobs", use_container_width=True):
         if not query.strip():
-            st.warning("Please enter a city or ZIP code to search.")
+            st.warning("Please enter a city or ZIP code.")
             st.stop()
 
-        # Get user coordinates
         if search_type == "ZIP Code":
             user_coords = ZIP_COORDS.get(query.strip())
         else:
@@ -155,13 +163,11 @@ elif st.session_state.page == "main":
             st.error("⚠️ Could not find that city or ZIP in California.")
             st.stop()
 
-        # Compute distances
         jobs["coords"] = jobs["location"].apply(get_coords)
         jobs = jobs.dropna(subset=["coords"])
         jobs["distance"] = jobs["coords"].apply(lambda c: haversine(user_coords, c))
         nearby = jobs[jobs["distance"] <= radius].sort_values("distance")
 
-        # ---------- Show Results ----------
         if nearby.empty:
             st.warning(f"No jobs found within {radius} miles of {query}.")
         else:
@@ -171,7 +177,7 @@ elif st.session_state.page == "main":
                 client = row.get("client", "Unknown Client")
                 loc = row.get("location", "Unknown Location")
                 dist = row["distance"]
-                header = f"🧑‍⚕️ {client} — {loc} ({dist:.1f} miles)"
+                header = f"🏥 {client} — {loc} ({dist:.1f} miles)"
 
                 with st.expander(header, expanded=False):
                     st.markdown(f"**Client:** {client}")
