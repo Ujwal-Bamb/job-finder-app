@@ -2,27 +2,11 @@ import streamlit as st
 import pandas as pd
 from geopy.distance import geodesic
 
-# ------------------ Page Config ------------------
 st.set_page_config(page_title="Keep Smiling Job Finder", layout="wide")
-
-st.markdown(
-    """
-    <style>
-    body {background-color: #0E1117; color: #FFFFFF; font-family: 'Segoe UI', sans-serif;}
-    .stButton>button {background-color:#FF4B4B; color:white; height:3em; width:100%; font-size:16px; border-radius:12px;}
-    .stSlider>div>div>div>div {color:#FF4B4B;}
-    .job-card {background: linear-gradient(135deg, #6a11cb, #2575fc); border-radius:12px; padding:15px; margin:10px 0; box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: all 0.2s ease-in-out;}
-    .job-card:hover {transform: scale(1.03); box-shadow: 0 6px 20px rgba(255,75,75,0.5);}
-    .job-title {font-size:1.3rem; font-weight:bold; color:white;}
-    .job-sub {font-size:1rem; color:#FFD700; margin-bottom:5px;}
-    </style>
-    """, unsafe_allow_html=True
-)
-
 st.title("😊 Keep Smiling Job Finder")
 st.markdown("Find your next job closer to home 💼")
 
-# ------------------ Load California Cities with ZIPs ------------------
+# ------------------ Load California cities with ZIPs ------------------
 @st.cache_data
 def load_ca_cities_github(url):
     df = pd.read_csv(url)
@@ -30,30 +14,31 @@ def load_ca_cities_github(url):
     zip_dict = {}
     for _, row in df.iterrows():
         city_name = row['city'].strip().title()
-        lat, lon = row['lat'], row['lng']
-        city_dict[city_name] = (lat, lon)
-        # Handle multiple zip codes
+        lat, lng = row['lat'], row['lng']
+        city_dict[city_name] = (lat, lng)
+        # expand multiple ZIPs
         if pd.notna(row['zips']):
             for z in str(row['zips']).split():
-                zip_dict[z] = (lat, lon)
+                zip_dict[z] = (lat, lng)
     return city_dict, zip_dict
 
 GITHUB_URL = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/refs/heads/main/california_cities_minimal.csv"
 CA_CITIES, ZIP_TO_COORD = load_ca_cities_github(GITHUB_URL)
 
-# ------------------ Job helper functions ------------------
+# ------------------ Helper functions ------------------
 def parse_job_locations(loc_str):
     if pd.isna(loc_str):
         return []
     return [x.strip().title() for x in str(loc_str).split(',') if x.strip()]
 
-def expand_jobs(df, col='location'):
+def expand_jobs(df, col_name):
+    """Expand rows if a job has multiple cities in the location column"""
     rows = []
     for _, row in df.iterrows():
-        cities = parse_job_locations(row[col])
+        cities = parse_job_locations(row[col_name])
         for city in cities:
             new_row = row.copy()
-            new_row[col] = city
+            new_row[col_name] = city
             rows.append(new_row)
     return pd.DataFrame(rows).reset_index(drop=True)
 
@@ -64,7 +49,12 @@ def distance_miles(coord1, coord2):
 uploaded_file = st.file_uploader("Upload your jobs CSV file", type=['csv'])
 if uploaded_file:
     jobs_df = pd.read_csv(uploaded_file)
-    jobs_df = expand_jobs(jobs_df, 'location')
+
+    # ------------------ Ask user which column has city names ------------------
+    all_cols = jobs_df.columns.tolist()
+    location_col = st.selectbox("Select the column that contains job locations / cities:", all_cols)
+
+    jobs_df = expand_jobs(jobs_df, location_col)
 
     # ------------------ Candidate Input ------------------
     st.sidebar.header("Search Jobs")
@@ -89,7 +79,7 @@ if uploaded_file:
         
         if candidate_coord:
             # Map job locations to coordinates
-            jobs_df['Job_Coords'] = jobs_df['location'].apply(lambda x: CA_CITIES.get(x))
+            jobs_df['Job_Coords'] = jobs_df[location_col].apply(lambda x: CA_CITIES.get(x))
             jobs_df = jobs_df.dropna(subset=['Job_Coords']).reset_index(drop=True)
 
             # Compute distances
@@ -104,16 +94,16 @@ if uploaded_file:
                 st.subheader(f"Jobs within {search_radius} miles of {search_input}:")
                 for _, row in filtered_jobs.iterrows():
                     st.markdown(f"""
-                    <div class="job-card">
-                        <div class="job-title">{row['client_name']} - {row['job_title']}</div>
-                        <div class="job-sub">{row['location']} — {row['Distance']:.1f} mi</div>
-                        <div>{''.join([f"<b>{col}:</b> {row[col]}<br>" for col in filtered_jobs.columns if col not in ['Job_Coords','Distance']])}</div>
+                    <div style="background: linear-gradient(135deg, #6a11cb, #2575fc); border-radius:12px; padding:15px; margin:10px 0; color:white;">
+                        <b>{row.get('client_name', 'Client')} - {row.get('job_title', 'Job Title')}</b><br>
+                        {row[location_col]} — {row['Distance']:.1f} mi<br>
+                        {''.join([f"<b>{col}:</b> {row[col]}<br>" for col in filtered_jobs.columns if col not in ['Job_Coords','Distance']])}
                     </div>
                     """, unsafe_allow_html=True)
 
                 # Map
                 map_data = pd.DataFrame(filtered_jobs['Job_Coords'].tolist(), columns=['lat','lon'])
-                map_data['job_title'] = filtered_jobs['job_title']
+                map_data['job_title'] = filtered_jobs.get('job_title', '')
                 st.map(map_data)
 else:
     st.info("Upload a CSV file with job listings to start searching.")
