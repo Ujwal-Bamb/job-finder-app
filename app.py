@@ -11,22 +11,21 @@ st.set_page_config(page_title="😊 Keep Smiling Job Finder", layout="wide")
 # ---------------- WELCOME ANIMATION ----------------
 st.markdown("""
 <style>
+html, body {height:100%; margin:0; padding:0;}
 body {
-  margin:0; padding:0;
   background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
   background-size: 400% 400%;
   animation: bgmove 8s ease infinite;
+  display: flex; justify-content: center; align-items: center;
 }
 @keyframes bgmove {
   0% {background-position: 0% 50%;}
   50% {background-position: 100% 50%;}
   100% {background-position: 0% 50%;}
 }
-.center-screen {
-  height: 100vh;
-  display: flex; flex-direction: column;
-  justify-content: center; align-items: center;
+.welcome-container {
   text-align: center;
+  color: white;
 }
 .title {
   font-size: 70px; font-weight: 900;
@@ -43,7 +42,7 @@ body {
 @keyframes fadeIn {from{opacity:0; transform:scale(0.95);} to{opacity:1; transform:scale(1);}}
 @keyframes fadeInSub {from{opacity:0;} to{opacity:0.9;}}
 .start-btn {
-  margin-top: 40px; padding: 15px 50px; font-size:24px;
+  margin-top: 40px; padding: 15px 50px; font-size:28px;
   font-weight:bold; border-radius:30px; border:none;
   background:#00c6ff; color:white; cursor:pointer;
   animation:pulse 1.5s infinite alternate;
@@ -55,15 +54,17 @@ body {
 if "show_main" not in st.session_state:
     st.session_state.show_main = False
 
-# Welcome page
+# ---------------- FULL SCREEN WELCOME ----------------
 if not st.session_state.show_main:
     st.markdown("""
-    <div class="center-screen">
+    <div class="welcome-container">
         <h1 class="title">😊 Keep Smiling Job Finder</h1>
         <h3 class="subtitle">Find your next opportunity closer to home 💼</h3>
+        <br>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("🚀 Let's Start"):
+    start = st.button("🚀 Let's Start")
+    if start:
         st.session_state.show_main = True
         st.experimental_rerun()
 
@@ -79,60 +80,42 @@ if st.session_state.show_main:
         df.columns = df.columns.str.strip().str.lower()
         st.success(f"✅ Loaded {len(df)} jobs successfully!")
 
-        # ---------------- MULTI-LOCATION EXPANSION ----------------
+        # Multi-location expansion
         rows = []
         for _, r in df.iterrows():
             locs = r["location"]
             if isinstance(locs, str) and locs.startswith('['):
-                try:
-                    loc_list = ast.literal_eval(locs)
-                except:
-                    loc_list = [loc.strip() for loc in locs.split(',')]
-            elif isinstance(locs, list):
-                loc_list = locs
-            else:
-                loc_list = [locs]
+                try: loc_list = ast.literal_eval(locs)
+                except: loc_list = [loc.strip() for loc in locs.split(',')]
+            elif isinstance(locs, list): loc_list = locs
+            else: loc_list = [locs]
             for loc in loc_list:
                 new_row = r.copy()
                 new_row["location"] = loc.strip()
                 rows.append(new_row)
         df_expanded = pd.DataFrame(rows)
 
-        # ---------------- SEARCH INPUT ----------------
         col1, col2, col3 = st.columns(3)
-        with col1:
-            zip_code = st.text_input("📮 ZIP Code (optional)")
-        with col2:
-            city = st.text_input("🏙️ City (optional)")
-        with col3:
-            state = st.text_input("🗺️ State (optional)")
+        with col1: zip_code = st.text_input("📮 ZIP Code (optional)")
+        with col2: city = st.text_input("🏙️ City (optional)")
+        with col3: state = st.text_input("🗺️ State (optional)")
         radius = st.slider("🎯 Search Radius (miles)", 10, 200, 40)
         find = st.button("🔍 Find Jobs Near Me", use_container_width=True)
 
         geolocator = Nominatim(user_agent="job_locator")
-
         @st.cache_data(show_spinner=False)
         def geo(place):
-            try:
-                loc = geolocator.geocode(f"{place}, USA", timeout=10)
-                if loc:
-                    return loc.latitude, loc.longitude
-            except:
-                return None, None
-            return None, None
+            try: loc = geolocator.geocode(f"{place}, USA", timeout=10); return (loc.latitude, loc.longitude) if loc else (None,None)
+            except: return (None,None)
 
-        # ---------------- SEARCH & FILTER ----------------
         if find:
-            with st.spinner("📍 Locating jobs near you..."):
+            with st.spinner("📍 Locating jobs..."):
                 cand = None
-                if zip_code:
-                    cand = geo(str(zip_code))
+                if zip_code: cand = geo(str(zip_code))
                 if (not cand) or (None in cand):
-                    if city and state:
-                        cand = geo(f"{city}, {state}")
+                    if city and state: cand = geo(f"{city}, {state}")
                 if (not cand) or (None in cand):
-                    st.error("❌ Could not find location. Please check ZIP/City/State.")
-                    st.stop()
+                    st.error("❌ Could not find location. Check ZIP/City/State."); st.stop()
 
                 df_expanded["full_location"] = df_expanded.apply(lambda r: f"{r.get('location','')}, {r.get('state','')}", axis=1)
                 unique_places = df_expanded["full_location"].unique()
@@ -142,8 +125,7 @@ if st.session_state.show_main:
                 df_expanded["distance"] = df_expanded.apply(lambda r: geodesic(cand, (r["lat"], r["lon"])).miles, axis=1)
                 df_near = df_expanded[df_expanded["distance"] <= radius].sort_values("distance")
 
-                if df_near.empty:
-                    st.warning("⚠️ No jobs found within this range.")
+                if df_near.empty: st.warning("⚠️ No jobs found within this range.")
                 else:
                     st.markdown(f"## ✨ {len(df_near)} Jobs Available Within {radius} Miles")
                     for _, r in df_near.iterrows():
