@@ -4,116 +4,81 @@ from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 from streamlit_folium import st_folium
 import folium
-import time
 
 # ---------------------- PAGE CONFIG ----------------------
-st.set_page_config(page_title="Keep Smiling 😊 Job Finder", page_icon="😊", layout="wide")
+st.set_page_config(page_title="😊 Keep Smiling Job Finder", page_icon="😊", layout="wide")
 
-# ---------------------- ANIMATED WELCOME PAGE ----------------------
-if "page" not in st.session_state:
-    st.session_state.page = "welcome"
+# ---------------------- CUSTOM ANIMATED HEADER ----------------------
+st.markdown(
+    """
+    <style>
+    @keyframes gradientMove {
+      0% {background-position: 0% 50%;}
+      50% {background-position: 100% 50%;}
+      100% {background-position: 0% 50%;}
+    }
+    .header {
+        background: linear-gradient(-45deg, #00b4db, #0083b0, #00b4db, #0083b0);
+        background-size: 400% 400%;
+        animation: gradientMove 10s ease infinite;
+        color: white;
+        text-align: center;
+        padding: 25px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+    .header h1 {
+        font-size: 2.8em;
+        margin: 0;
+    }
+    .header p {
+        font-size: 1.2em;
+        margin-top: 10px;
+    }
+    </style>
+    <div class="header">
+        <h1>😊 Keep Smiling – Nearby Job Finder</h1>
+        <p>Find your dream job within your area — quickly and happily!</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
-if st.session_state.page == "welcome":
-    st.markdown(
-        """
-        <style>
-        @keyframes fadeIn {
-            from {opacity: 0; transform: translateY(20px);}
-            to {opacity: 1; transform: translateY(0);}
-        }
-        .welcome-container {
-            background: linear-gradient(135deg, #00b4db, #0083b0);
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            text-align: center;
-            animation: fadeIn 2s ease-in-out;
-        }
-        .title {
-            font-size: 3em;
-            font-weight: bold;
-            animation: fadeIn 2s ease-in-out;
-        }
-        .subtitle {
-            font-size: 1.3em;
-            margin-top: 10px;
-            animation: fadeIn 3s ease-in-out;
-        }
-        .emoji {
-            font-size: 4em;
-            margin-top: 20px;
-            animation: fadeIn 2s ease-in-out infinite alternate;
-        }
-        </style>
-        <div class="welcome-container">
-            <div class="emoji">😊</div>
-            <div class="title">Keep Smiling Job Finder</div>
-            <div class="subtitle">Find your next opportunity within miles — easily and happily!</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+# ---------------------- MAIN APP ----------------------
+st.sidebar.header("📍 Search Settings")
 
-    time.sleep(1.5)
-    if st.button("Let's Start 🚀", use_container_width=True):
-        st.session_state.page = "main"
-        st.rerun()
+uploaded_file = st.sidebar.file_uploader("Upload Job CSV File", type=["csv"])
 
-# ---------------------- MAIN APP PAGE ----------------------
-elif st.session_state.page == "main":
+candidate_zip = st.sidebar.text_input("Enter Candidate ZIP Code or City", "")
+search_radius = st.sidebar.slider("Search Radius (miles)", 5, 300, 40)
 
-    st.markdown(
-        """
-        <div style="background-color:#004d99;padding:12px;border-radius:10px;text-align:center">
-            <h1 style="color:white;">😊 Keep Smiling – Nearby Job Finder</h1>
-            <p style="color:#e6f2ff;font-size:18px;">
-                Upload your job listings, enter your ZIP code, and find opportunities within your preferred radius!
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+if uploaded_file:
+    df = pd.read_csv(uploaded_file)
+    df.columns = df.columns.str.strip().str.lower()
 
-    uploaded_file = st.file_uploader("📂 Upload your job CSV file", type=["csv"])
+    if "location" not in df.columns:
+        st.error("❌ The CSV must contain a 'Location' column.")
+        st.stop()
 
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        df.columns = df.columns.str.strip().str.lower()
+    # Handle multiple job locations
+    rows = []
+    for _, row in df.iterrows():
+        locations = [loc.strip() for loc in str(row["location"]).replace("/", ",").split(",") if loc.strip()]
+        for loc in locations:
+            new_row = row.copy()
+            new_row["location"] = loc
+            rows.append(new_row)
+    df = pd.DataFrame(rows)
 
-        if "location" not in df.columns:
-            st.error("❌ The CSV must contain a 'Location' column.")
-            st.stop()
+    geolocator = Nominatim(user_agent="job_locator")
 
-        rows = []
-        for _, row in df.iterrows():
-            locations = [loc.strip() for loc in str(row["location"]).replace("/", ",").split(",") if loc.strip()]
-            for loc in locations:
-                new_row = row.copy()
-                new_row["location"] = loc
-                rows.append(new_row)
-
-        df = pd.DataFrame(rows)
-        st.success(f"✅ Expanded to {len(df)} total job locations!")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            candidate_zip = st.text_input("📍 Enter your ZIP Code or City")
-        with col2:
-            search_radius = st.number_input("📏 Search Radius (miles)", min_value=5, max_value=500, value=50)
-
-        if candidate_zip:
-            geolocator = Nominatim(user_agent="job_locator")
-            user_location = geolocator.geocode(f"{candidate_zip}, USA")
-
-            if not user_location:
-                st.error("❌ Could not find that ZIP code or city. Please try again.")
-                st.stop()
-
+    # If user entered ZIP — process it immediately
+    if candidate_zip:
+        user_location = geolocator.geocode(f"{candidate_zip}, USA")
+        if user_location:
             user_coords = (user_location.latitude, user_location.longitude)
 
+            # Geocode job locations
             def get_lat_lon(location):
                 try:
                     loc = geolocator.geocode(location + ", USA")
@@ -126,49 +91,53 @@ elif st.session_state.page == "main":
             df[["latitude", "longitude"]] = df["location"].apply(lambda x: pd.Series(get_lat_lon(x)))
             df = df.dropna(subset=["latitude", "longitude"])
 
+            # Calculate distances
             df["distance_miles"] = df.apply(
-                lambda row: geodesic(user_coords, (row["latitude"], row["longitude"])).miles, axis=1
+                lambda r: geodesic(user_coords, (r["latitude"], r["longitude"])).miles, axis=1
             )
 
             nearby_jobs = df[df["distance_miles"] <= search_radius].sort_values("distance_miles")
 
+            # Create map centered at user
             m = folium.Map(location=user_coords, zoom_start=7)
             folium.Marker(
                 location=user_coords,
-                popup="📍 You are here",
+                popup="📍 Candidate Location",
                 icon=folium.Icon(color="red", icon="user", prefix="fa"),
             ).add_to(m)
 
             for _, r in nearby_jobs.iterrows():
                 popup = f"""
-                <b>Client:</b> {r.get('client', 'N/A')}<br>
+                <b>Client:</b> {r.get('client','N/A')}<br>
                 <b>Location:</b> {r['location']}<br>
                 <b>Distance:</b> {round(r['distance_miles'], 2)} miles<br>
-                <b>Role:</b> {r.get('role', 'N/A')}<br>
-                <b>Language:</b> {r.get('language', 'N/A')}
+                <b>Gender Required:</b> {r.get('gender','N/A')}<br>
+                <b>Language:</b> {r.get('language','N/A')}
                 """
                 folium.Marker(
                     location=[r["latitude"], r["longitude"]],
                     popup=popup,
-                    tooltip=f"{r['location']} ({round(r['distance_miles'], 1)} mi)",
+                    tooltip=f"{r['location']} ({round(r['distance_miles'],1)} mi)",
                     icon=folium.Icon(color="blue", icon="briefcase", prefix="fa"),
                 ).add_to(m)
 
-            st.subheader(f"📊 Found {len(nearby_jobs)} nearby jobs within {search_radius} miles")
-
-            st_folium(m, width=1200, height=600)
-            st.dataframe(nearby_jobs[["client", "location", "role", "language", "distance_miles"]])
+            st.success(f"🎯 Found {len(nearby_jobs)} jobs within {search_radius} miles of {candidate_zip}")
+            st_folium(m, width=1100, height=550)
+            st.dataframe(nearby_jobs[["client", "location", "gender", "language", "distance_miles"]])
         else:
-            st.info("👆 Enter your ZIP code to start finding jobs near you!")
+            st.warning("⚠️ Could not find that ZIP code or city.")
     else:
-        st.info("📤 Please upload a CSV file to begin.")
+        st.info("👉 Enter a ZIP code or city to view nearby jobs on the map.")
+else:
+    st.info("📂 Please upload your job list CSV file from the sidebar to begin.")
 
-    st.markdown(
-        """
-        <hr>
-        <div style='text-align:center; color:gray;'>
-            Made with ❤️ by Ujwal | Keep Smiling 😊
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+# ---------------------- FOOTER ----------------------
+st.markdown(
+    """
+    <hr>
+    <div style='text-align:center; color:gray;'>
+        Made with ❤️ by <b>Ujwal</b> | Keep Smiling 😊
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
