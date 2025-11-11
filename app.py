@@ -1,70 +1,40 @@
-import streamlit as st
 import pandas as pd
-from geopy.distance import geodesic
+jobs_df = pd.read_csv("your_jobs_data.csv")
 from geopy.geocoders import Nominatim
-
-# Sample job data with multiple locations in one string separated by commas
-job_data = {
-    'Job Title': ['Data Scientist', 'Software Engineer', 'Project Manager'],
-    'Client Name': ['Client A', 'Client B', 'Client C'],
-    'Job Location': ['Oakland, Los Angeles, Alameda', 'San Francisco, San Jose', 'Sacramento, Fresno'],
-    'Agenda Language': ['English', 'English, Spanish', 'English'],
-    'Job Details': [
-        'Analyze data and build models.',
-        'Develop software applications.',
-        'Manage projects and teams.'
-    ]
-}
-
-df = pd.DataFrame(job_data)
-
-# Initialize geolocator
 geolocator = Nominatim(user_agent="job_board_app")
+location = geolocator.geocode("94501")  # Example ZIP
+lat, lon = location.latitude, location.longitude
+from geopy.distance import geodesic
 
-# Cache location lookup for performance
-@st.cache_data
-def get_location_coords(location):
-    try:
-        loc = geolocator.geocode(location)
-        if loc:
-            return (loc.latitude, loc.longitude)
+def distance_between(zip1, zip2):
+    loc1 = geolocator.geocode(zip1)
+    loc2 = geolocator.geocode(zip2)
+    coord1 = (loc1.latitude, loc1.longitude)
+    coord2 = (loc2.latitude, loc2.longitude)
+    return geodesic(coord1, coord2).miles
+jobs_df['match'] = jobs_df['Job Location'].apply(lambda loc: distance_between(user_zip, loc))
+filtered_jobs = jobs_df[jobs_df['match'] <= selected_radius]
+import streamlit as st
+
+st.header("😊 Welcome to the Job Board!")
+
+user_zip = st.text_input("Enter your ZIP code:")
+radius = st.slider("Select search radius (miles):", 10, 100, 25)
+
+if user_zip:
+    # geocode user ZIP
+    user_location = geolocator.geocode(user_zip)
+    if user_location:
+        # filter jobs
+        filtered_jobs = filter_jobs(user_location, radius, jobs_df)  # define this function
+        if not filtered_jobs.empty:
+            for idx, job in filtered_jobs.iterrows():
+                with st.expander(job['Job Title']):
+                    st.write(f"**Client:** {job['Client Name']}")
+                    st.write(f"**Location:** {job['Job Location']}")
+                    st.write(f"**Agenda:** {job['Agenda']}")
+                    st.write(f"**Language:** {job['Language']}")
         else:
-            return None
-    except:
-        return None
-
-st.title("😊 Welcome to the Job Board 😊")
-
-candidate_zip = st.text_input("Enter your zip code to find jobs within 50 miles:")
-
-if candidate_zip:
-    candidate_coords = get_location_coords(candidate_zip)
-    if candidate_coords is None:
-        st.error("Invalid or unknown zip code. Please try again.")
+            st.write(f"No jobs found within {radius} miles — try increasing your search radius!")
     else:
-        filtered_jobs = []
-        for idx, row in df.iterrows():
-            # Split multiple locations and check distances
-            job_locations = [loc.strip() for loc in row['Job Location'].split(',')]
-            for loc in job_locations:
-                loc_coords = get_location_coords(loc)
-                if loc_coords:
-                    dist = geodesic(candidate_coords, loc_coords).miles
-                    if dist <= 50:
-                        filtered_jobs.append(row)
-                        break
-
-        if filtered_jobs:
-            job_selection = st.selectbox("Select a job to see details:", [job['Job Title'] for job in filtered_jobs])
-            for job in filtered_jobs:
-                if job['Job Title'] == job_selection:
-                    st.subheader(job['Job Title'])
-                    st.write(f"Client: {job['Client Name']}")
-                    st.write(f"Locations: {job['Job Location']}")
-                    st.write(f"Agenda Language: {job['Agenda Language']}")
-                    st.write(f"Job Details: {job['Job Details']}")
-                    break
-        else:
-            st.info("No jobs found within 50 miles of your location.")
-else:
-    st.info("Please enter your zip code to search for jobs.")
+        st.error("Invalid ZIP code entered.")
