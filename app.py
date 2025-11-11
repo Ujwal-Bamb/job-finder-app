@@ -1,130 +1,65 @@
-import streamlit as st
 import pandas as pd
+import streamlit as st
 from geopy.geocoders import Nominatim
-from geopy.distance import geodesic
-import folium
 from streamlit_folium import st_folium
+import folium
 
-# ---------------------------------------------
-# 🌈 PAGE CONFIG
-# ---------------------------------------------
-st.set_page_config(
-    page_title="😊 Keep Smiling - Nearby Job Finder 🌍",
-    page_icon="🧭",
-    layout="wide",
-)
+st.set_page_config(page_title="Job Finder", layout="wide")
 
-# ---------------------------------------------
-# 🎨 STYLISH HEADER (Animated Gradient)
-# ---------------------------------------------
-st.markdown(
-    """
-    <style>
-    .title {
-        font-size: 42px;
-        text-align: center;
-        font-weight: bold;
-        background: linear-gradient(90deg, #FF6F61, #FFB347);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        animation: slide 3s infinite alternate;
-    }
-    @keyframes slide {
-        from {letter-spacing: 1px;}
-        to {letter-spacing: 3px;}
-    }
-    .subtitle {
-        text-align: center;
-        font-size: 18px;
-        color: #444;
-        margin-top: -10px;
-        margin-bottom: 20px;
-    }
-    </style>
-    <div class="title">😊 Keep Smiling – Nearby Job Finder 🌍</div>
-    <div class="subtitle">Find jobs around your ZIP code within 40 miles — quickly, visually, and easily!</div>
-    """,
-    unsafe_allow_html=True,
-)
+st.title("🌎 Multi-location Job Finder")
 
-# ---------------------------------------------
-# 📤 FILE UPLOAD SECTION
-# ---------------------------------------------
-st.sidebar.header("📂 Upload Job Data")
-uploaded_file = st.sidebar.file_uploader("Upload a CSV file with job data", type=["csv"])
+uploaded_file = st.file_uploader("Upload your job CSV file", type=["csv"])
 
-st.sidebar.markdown(
-    """
-    **CSV format example:**
-    ```
-    Job Title,City,State,Gender Required,Language
-    Nurse,Chicago,IL,Female,English
-    Technician,Dallas,TX,Male,Spanish
-    ```
-    """
-)
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
 
-# ---------------------------------------------
-# 🧭 USER INPUTS
-# ---------------------------------------------
-st.sidebar.header("📍 Candidate Details")
-zip_code = st.sidebar.text_input("Enter your ZIP Code:")
-radius = st.sidebar.slider("Select search radius (miles):", 5, 100, 40)
+    # Normalize column names
+    df.columns = df.columns.str.strip().str.lower()
 
-# ---------------------------------------------
-# 🌎 PROCESSING LOGIC
-# ---------------------------------------------
-if uploaded_file and zip_code:
-    geolocator = Nominatim(user_agent="job_finder_app")
+    if "location" not in df.columns:
+        st.error("❌ The CSV must contain a 'Location' column.")
+        st.stop()
 
-    try:
-        candidate_location = geolocator.geocode(zip_code)
-        if not candidate_location:
-            st.error("❌ Could not find location for the given ZIP code.")
-        else:
-            candidate_coords = (candidate_location.latitude, candidate_location.longitude)
-            df = pd.read_csv(uploaded_file)
+    # Handle multiple locations per client
+    rows = []
+    for _, row in df.iterrows():
+        # Split by comma, slash, or semicolon
+        locations = [loc.strip() for loc in str(row["location"]).replace("/", ",").split(",") if loc.strip()]
+        for loc in locations:
+            new_row = row.copy()
+            new_row["location"] = loc
+            rows.append(new_row)
 
-            # Add job coordinates
-            st.info("🌍 Locating jobs... please wait a moment ⏳")
-            df["Coordinates"] = df.apply(
-                lambda row: geolocator.geocode(f"{row['City']}, {row['State']}"), axis=1
-            )
-            df["Latitude"] = df["Coordinates"].apply(lambda x: x.latitude if x else None)
-            df["Longitude"] = df["Coordinates"].apply(lambda x: x.longitude if x else None)
+    # Create expanded dataframe
+    expanded_df = pd.DataFrame(rows)
 
-            # Drop missing coordinates
-            df = df.dropna(subset=["Latitude", "Longitude"])
+    st.success(f"✅ Expanded {len(df)} rows to {len(expanded_df)} locations!")
 
-            # Calculate distances
-            df["Distance (miles)"] = df.apply(
-                lambda row: geodesic(candidate_coords, (row["Latitude"], row["Longitude"])).miles,
-                axis=1,
-            )
+    geolocator = Nominatim(user_agent="job_locator")
 
-            # Filter nearby jobs
-            nearby_jobs = df[df["Distance (miles)"] <= radius].sort_values("Distance (miles)")
+    def get_lat_lon(location):
+        try:
+            loc = geolocator.geocode(location + ", USA")
+            if loc:
+                return loc.latitude, loc.longitude
+        except:
+            return None, None
+        return None, None
 
-            # Show results
-            st.success(f"🎯 Found {len(nearby_jobs)} job(s) within {radius} miles!")
-            st.dataframe(nearby_jobs)
+    expanded_df[["latitude", "longitude"]] = expanded_df["location"].apply(lambda x: pd.Series(get_lat_lon(x)))
 
-            # Map view
-            if len(nearby_jobs) > 0:
-                m = folium.Map(location=candidate_coords, zoom_start=8)
-                folium.Marker(
-                    candidate_coords, tooltip="Candidate Location", icon=folium.Icon(color="blue")
-                ).add_to(m)
+    map_center = [37.0902, -95.7129]  # USA center
+    m = folium.Map(location=map_center, zoom_start=4)
 
-                for _, row in nearby_jobs.iterrows():
-                    folium.Marker(
-                        [row["Latitude"], row["Longitude"]],
-                        tooltip=f"{row['Job Title']} - {row['City']}, {row['State']}",
-                        icon=folium.Icon(color="green"),
-                    ).add_to(m)
+    for _, r in expanded_df.dropna(subset=["latitude", "longitude"]).iterrows():
+        popup = f"<b>Client:</b> {r.get('client','N/A')}<br><b>Location:</b> {r['location']}"
+        folium.Marker(
+            location=[r["latitude"], r["longitude"]],
+            popup=popup,
+            tooltip=r["location"],
+            icon=folium.Icon(color="blue", icon="briefcase", prefix="fa"),
+        ).add_to(m)
 
-                st_folium(m, width=700, height=450)
-    except Exception as e:
-        st.error(f"⚠️ Error: {e}")
+    st_folium(m, width=1200, height=600)
 else:
-    st.info("📥 Upload your CSV and enter your ZIP code to begin.")
+    st.info("📂 Upload a CSV file with columns like Client, Location, Role, etc.")
