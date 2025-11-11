@@ -11,21 +11,30 @@ st.markdown("Find your next job closer to home 💼")
 # ------------------ Load California cities + ZIPs ------------------
 @st.cache_data(show_spinner=False)
 def load_ca_cities_github(url):
-    df = pd.read_csv(url)
-    city_dict = {}
-    zip_dict = {}
-    for _, row in df.iterrows():
-        city_name = str(row['city']).strip().title()
-        lat, lng = row['lat'], row['lng']
-        city_dict[city_name] = (lat, lng)
-        if pd.notna(row['zips']):
-            for z in str(row['zips']).split():
-                zip_dict[z] = (lat, lng)
-    return city_dict, zip_dict
+    try:
+        df = pd.read_csv(url)
+        city_dict = {}
+        zip_dict = {}
+        for _, row in df.iterrows():
+            city_name = str(row['city']).strip().title()
+            lat, lng = row['lat'], row['lng']
+            city_dict[city_name] = (lat, lng)
+            if pd.notna(row['zips']):
+                for z in str(row['zips']).split():
+                    zip_dict[z] = (lat, lng)
+        return city_dict, zip_dict
+    except Exception as e:
+        st.error(f"⚠️ Error loading California city data: {e}")
+        return {}, {}
 
-GITHUB_URL = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/refs/heads/main/california_cities_minimal.csv"
+# ✅ Updated GitHub URL
+GITHUB_URL = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/california_cities_minimal.csv"
+
 CA_CITIES, ZIP_TO_COORD = load_ca_cities_github(GITHUB_URL)
 CITY_LIST = sorted(CA_CITIES.keys())
+
+if not CA_CITIES:
+    st.stop()
 
 # ------------------ Helper functions ------------------
 def normalize_location(loc):
@@ -34,7 +43,7 @@ def normalize_location(loc):
     return loc
 
 def haversine_miles(coord1, coord2):
-    """Fast distance calculator in miles"""
+    """Calculate distance in miles using the Haversine formula."""
     R = 3958.8  # Earth radius in miles
     lat1, lon1 = map(radians, coord1)
     lat2, lon2 = map(radians, coord2)
@@ -48,7 +57,7 @@ def fuzzy_city_lookup(city_name):
     """Try to match a possibly misspelled or extended city name"""
     if not isinstance(city_name, str) or not city_name.strip():
         return None
-    city_name = normalize_location(city_name.split(",")[0])  # remove ', CA' or similar
+    city_name = normalize_location(city_name.split(",")[0])  # remove ", CA" or similar
     if city_name in CA_CITIES:
         return CA_CITIES[city_name]
     match = get_close_matches(city_name, CITY_LIST, n=1, cutoff=0.8)
@@ -58,8 +67,14 @@ def fuzzy_city_lookup(city_name):
 
 # ------------------ Upload Jobs CSV ------------------
 uploaded_file = st.file_uploader("📂 Upload your jobs CSV file", type=['csv'])
+
 if uploaded_file:
-    jobs_df = pd.read_csv(uploaded_file)
+    try:
+        jobs_df = pd.read_csv(uploaded_file)
+    except Exception as e:
+        st.error(f"Error reading CSV file: {e}")
+        st.stop()
+
     if 'location' not in jobs_df.columns:
         st.error("Your CSV must include a 'location' column for job city names.")
         st.stop()
@@ -113,56 +128,49 @@ if uploaded_file:
                 st.stop()
             candidate_coord = ZIP_TO_COORD[candidate_zip]
 
-        # ✅ FIXED INDENTATION BLOCK
         with st.spinner("Finding nearby jobs..."):
             # Map job locations to coordinates using fuzzy matching
             jobs_df['Job_Coords'] = jobs_df['location'].apply(fuzzy_city_lookup)
 
-            # Inform user if any jobs missing valid city mapping
+            # Warn for unknown locations
             missing_coords_jobs = jobs_df[jobs_df['Job_Coords'].isna()]
             if not missing_coords_jobs.empty:
-                st.warning(f"{len(missing_coords_jobs)} job(s) were ignored due to unrecognized city names.")
+                st.warning(f"{len(missing_coords_jobs)} job(s) ignored due to unrecognized city names.")
 
-            # Drop jobs with unknown coordinates
             jobs_df = jobs_df.dropna(subset=['Job_Coords']).reset_index(drop=True)
 
             # Compute distances
             jobs_df['Distance'] = jobs_df['Job_Coords'].apply(lambda x: haversine_miles(candidate_coord, x))
 
-            # Filter by radius
+            # Filter jobs within radius
             filtered_jobs = jobs_df[jobs_df['Distance'] <= search_radius].sort_values('Distance').reset_index(drop=True)
 
-        # ✅ Everything below runs after the 'with' block
         if filtered_jobs.empty:
             st.warning(f"No jobs found within {search_radius} miles of your location.")
         else:
             st.success(f"🎯 Found {len(filtered_jobs)} job(s) within {search_radius} miles!")
 
-            # Show summary stats
-            st.metric("Closest Job (miles)", f"{filtered_jobs['Distance'].min():.1f}")
-            st.metric("Farthest Job (miles)", f"{filtered_jobs['Distance'].max():.1f}")
-
-            # Display jobs
+            # Job expanders
             for _, row in filtered_jobs.iterrows():
-                schedule = row.get('schedule', '')
-                language = row.get('language', '')
-                gender = row.get('gender', '')
+                client_name = row.get('client_name', 'Unknown Client')
+                job_title = row.get('job_title', 'Job')
+                location = row.get('location', 'Unknown City')
+                distance = row.get('Distance', 0)
 
-                # Clean field strings
-                schedule_str = f"Schedule: {schedule}" if schedule else ""
-                language_str = f"Language: {language}" if language else ""
-                gender_str = f"Gender: {gender}" if gender else ""
+                with st.expander(f"📍 {client_name} - {job_title} ({location} — {distance:.1f} miles)"):
+                    schedule = row.get('schedule', '')
+                    language = row.get('language', '')
+                    gender = row.get('gender', '')
+                    desc = row.get('description', '')
 
-                st.markdown(f"""
-                <div style="background: linear-gradient(135deg, #6a11cb, #2575fc);
-                            border-radius:12px; padding:15px; margin:10px 0; color:white;">
-                    <b>{row.get('client_name', 'Unknown Client')} - {row.get('job_title', 'Job')}</b><br>
-                    {row['location']} — {row['Distance']:.1f} mi<br>
-                    {schedule_str}<br>
-                    {language_str}<br>
-                    {gender_str}
-                </div>
-                """, unsafe_allow_html=True)
+                    if schedule:
+                        st.write(f"**Schedule:** {schedule}")
+                    if language:
+                        st.write(f"**Language:** {language}")
+                    if gender:
+                        st.write(f"**Gender:** {gender}")
+                    if desc:
+                        st.write(f"**Description:** {desc}")
 
             # Map plot
             map_data = pd.DataFrame(filtered_jobs['Job_Coords'].tolist(), columns=['lat', 'lon'])
