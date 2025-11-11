@@ -1,12 +1,6 @@
 [theme]
-primaryColor = "#FF6F61"        # Coral (friendly highlight)
-backgroundColor = "#FFF8F0"     # Soft cream background
-secondaryBackgroundColor = "#FFEBD4"  # Light peach panel
-textColor = "#3E3E3E"           # Warm dark grey
+primaryColor = "#FF6F61"
+backgroundColor = "#FFF8F0"
+secondaryBackgroundColor = "#FFEBD4"
+textColor = "#3E3E3E"
 font = "sans serif"
-
-[server]
-headless = true
-enableCORS = false
-enableXsrfProtection = false
-port = 8501
