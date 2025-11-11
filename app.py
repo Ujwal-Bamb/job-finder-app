@@ -9,7 +9,7 @@ st.set_page_config(page_title="Keep Smiling Job Finder", layout="wide", page_ico
 # ---------- Custom CSS ----------
 st.markdown("""
 <style>
-/* Global page */
+/* ---------- Global Styles ---------- */
 .stApp {
     background: linear-gradient(135deg, #e0f2ff, #ffffff);
     font-family: 'Segoe UI', sans-serif;
@@ -21,37 +21,49 @@ h1, h2, h3 {
     font-weight: 700;
 }
 
-/* Welcome section */
+/* Centering Utility */
 .center {
     text-align: center;
 }
 
-button[kind="primary"] {
+/* ---------- Welcome Page ---------- */
+#welcome-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 80vh;
+}
+#welcome-container button {
     background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
     color: white !important;
     border-radius: 10px !important;
-    padding: 10px 24px !important;
-    font-size: 18px !important;
+    padding: 12px 30px !important;
+    font-size: 20px !important;
     font-weight: 600 !important;
+    transition: all 0.3s ease-in-out;
 }
-button[kind="primary"]:hover {
+#welcome-container button:hover {
     background: linear-gradient(135deg, #1d4ed8, #2563eb) !important;
+    transform: scale(1.05);
 }
 
-/* Expander customization */
+/* ---------- Expander Cards ---------- */
 div[data-testid="stExpander"] {
-    background: linear-gradient(145deg, #e6f0ff, #ffffff);
+    background: linear-gradient(145deg, #f8fbff, #e6f0ff);
     border: 1px solid #bfdbfe;
-    border-radius: 12px;
-    box-shadow: 0 4px 10px rgba(37,99,235,0.1);
-    margin-bottom: 10px;
+    border-radius: 15px;
+    box-shadow: 0 6px 12px rgba(37,99,235,0.1);
+    margin-bottom: 15px;
+    overflow: hidden;
 }
 div[data-testid="stExpander"] div[role="button"] {
     background: linear-gradient(135deg, #60a5fa, #3b82f6);
-    border-radius: 12px;
+    border-radius: 15px 15px 0 0;
     color: white !important;
     font-weight: 600;
-    padding: 10px 16px !important;
+    padding: 14px 18px !important;
+    font-size: 17px;
 }
 div[data-testid="stExpander"] svg {
     color: white !important;
@@ -59,33 +71,49 @@ div[data-testid="stExpander"] svg {
 div[data-testid="stExpander"] p {
     color: #1e293b;
 }
+
+/* ---------- Job Card Content ---------- */
+.job-card {
+    background: white;
+    border-radius: 12px;
+    padding: 18px;
+    margin: 10px 0;
+    box-shadow: 0 4px 10px rgba(37,99,235,0.1);
+}
+.job-card h4 {
+    color: #1e3a8a;
+    margin-bottom: 8px;
+}
+.job-card p {
+    margin: 4px 0;
+    font-size: 15px;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------- State Management ----------
+# ---------- State ----------
 if "page" not in st.session_state:
     st.session_state.page = "welcome"
 
 # ---------- Welcome Page ----------
 if st.session_state.page == "welcome":
-    st.markdown("<h1 class='center'>😊 Keep Smiling Job Finder</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 class='center'>💼 Find your next job closer to home</h3>", unsafe_allow_html=True)
-
     st.markdown("""
-    <div style='text-align:center; margin-top:50px;'>
-        <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExcmY4OHd3bWFuNGY2ZzB6bnRqZDUxaTV2c3oxdm5ybGpnM3p4bHR0aCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="280" style="border-radius:12px;">
-        <p style='font-size:18px; margin-top:20px;'>Upload your job list and discover opportunities near you with ease!</p>
-    </div>
+    <div id="welcome-container">
+        <h1>😊 Keep Smiling Job Finder</h1>
+        <h3>💼 Find your next job closer to home</h3>
+        <img src="https://media.giphy.com/media/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="260" style="border-radius:12px; margin:25px 0;">
+        <p style="font-size:18px; color:#1e293b;">Upload your job list and discover nearby opportunities instantly!</p>
     """, unsafe_allow_html=True)
 
-    # Centered button
-    st.markdown("<div style='display:flex; justify-content:center; margin-top:40px;'>", unsafe_allow_html=True)
-    if st.button("🚀 Let's Start", use_container_width=False):
-        st.session_state.page = "main"
-        st.rerun()
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        if st.button("🚀 Let's Start", use_container_width=True):
+            st.session_state.page = "main"
+            st.rerun()
+
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ---------- Main Job Finder Page ----------
+# ---------- Main App ----------
 elif st.session_state.page == "main":
     st.title("😊 Keep Smiling Job Finder")
     st.write("Search caregiver job listings by city or ZIP code in California.")
@@ -137,9 +165,8 @@ elif st.session_state.page == "main":
         st.error("❌ Missing required column: 'location'")
         st.stop()
 
-    # ---------- Search Controls ----------
+    # ---------- Search ----------
     st.markdown("### 🔍 Search Jobs Near You")
-
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
         search_type = st.radio("Search by", ["City", "ZIP Code"], horizontal=True)
@@ -148,7 +175,6 @@ elif st.session_state.page == "main":
     with col3:
         radius = st.slider("Radius (miles)", 1, 100, 25)
 
-    # ---------- Find Jobs ----------
     if st.button("🔎 Find Jobs", use_container_width=True):
         if not query.strip():
             st.warning("Please enter a city or ZIP code.")
@@ -180,17 +206,17 @@ elif st.session_state.page == "main":
                 header = f"🏥 {client} — {loc} ({dist:.1f} miles)"
 
                 with st.expander(header, expanded=False):
-                    st.markdown(f"**Client:** {client}")
-                    st.markdown(f"**Location:** {loc}")
-                    st.markdown(f"**Distance:** {dist:.1f} miles")
-                    if "positions" in row:
-                        st.markdown(f"**Positions:** {row['positions']}")
-                    if "language" in row:
-                        st.markdown(f"**Language:** {row['language']}")
-                    if "pay rate" in row:
-                        st.markdown(f"**Pay Rate:** {row['pay rate']}")
-                    if "schedule" in row:
-                        st.markdown(f"**Schedule:** {row['schedule']}")
+                    st.markdown(f"""
+                    <div class='job-card'>
+                        <h4>🏥 {client}</h4>
+                        <p><b>📍 Location:</b> {loc}</p>
+                        <p><b>📏 Distance:</b> {dist:.1f} miles</p>
+                        <p><b>👥 Positions:</b> {row.get('positions', 'N/A')}</p>
+                        <p><b>🗣️ Language:</b> {row.get('language', 'N/A')}</p>
+                        <p><b>💰 Pay Rate:</b> {row.get('pay rate', 'N/A')}</p>
+                        <p><b>🕒 Schedule:</b> {row.get('schedule', 'N/A')}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
             # ---------- Map ----------
             st.subheader("🗺️ Job Locations")
