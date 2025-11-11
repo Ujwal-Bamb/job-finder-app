@@ -9,86 +9,72 @@ import time
 # ---------------------- PAGE CONFIG ----------------------
 st.set_page_config(page_title="😊 Keep Smiling Job Finder", layout="wide")
 
-# ---------------------- CUSTOM CSS (ANIMATION + THEME) ----------------------
+# ---------------------- ANIMATED SPLASH PAGE CSS ----------------------
 st.markdown("""
     <style>
-        /* Animated gradient background */
         body {
-            background: linear-gradient(-45deg, #ff9a9e, #fad0c4, #fbc2eb, #a6c1ee);
+            background: linear-gradient(-45deg, #FFDEE9, #B5FFFC, #FEE140, #FA709A);
             background-size: 400% 400%;
-            animation: gradientBG 10s ease infinite;
+            animation: gradientMove 10s ease infinite;
         }
 
-        @keyframes gradientBG {
+        @keyframes gradientMove {
             0% {background-position: 0% 50%;}
             50% {background-position: 100% 50%;}
             100% {background-position: 0% 50%;}
         }
 
-        /* Welcome text animation */
         .welcome-text {
-            font-size: 48px;
-            font-weight: bold;
-            color: white;
+            font-family: 'Trebuchet MS', sans-serif;
             text-align: center;
-            animation: fadeIn 2s ease-in-out;
-            margin-top: 20%;
+            font-size: 50px;
+            color: white;
+            font-weight: 700;
+            margin-top: 30vh;
+            animation: fadeInZoom 2s ease-in-out;
+        }
+
+        @keyframes fadeInZoom {
+            0% {opacity: 0; transform: scale(0.8);}
+            100% {opacity: 1; transform: scale(1);}
+        }
+
+        .sub-text {
+            text-align: center;
+            font-size: 22px;
+            color: white;
+            opacity: 0.8;
+            animation: fadeIn 2s ease-in-out 0.5s forwards;
         }
 
         @keyframes fadeIn {
-            0% {opacity: 0;}
-            100% {opacity: 1;}
-        }
-
-        /* Animated Let's Start button */
-        .start-btn {
-            display: block;
-            margin: 20px auto;
-            background-color: #4CAF50;
-            color: white;
-            font-size: 22px;
-            border: none;
-            padding: 15px 40px;
-            border-radius: 50px;
-            cursor: pointer;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0% {box-shadow: 0 0 0 0 rgba(72,239,128,0.7);}
-            70% {box-shadow: 0 0 0 20px rgba(72,239,128,0);}
-            100% {box-shadow: 0 0 0 0 rgba(72,239,128,0);}
-        }
-
-        .start-btn:hover {
-            transform: scale(1.05);
-            background-color: #45a049;
+            from {opacity: 0;}
+            to {opacity: 1;}
         }
     </style>
 """, unsafe_allow_html=True)
 
 # ---------------------- SPLASH SCREEN ----------------------
-if "started" not in st.session_state:
-    st.session_state.started = False
+if "show_main" not in st.session_state:
+    st.session_state.show_main = False
 
-if not st.session_state.started:
+if not st.session_state.show_main:
     st.markdown('<div class="welcome-text">😊 Keep Smiling Job Finder</div>', unsafe_allow_html=True)
-    start = st.button("🚀 Let’s Start", key="start_btn")
-    if start:
-        st.session_state.started = True
-        st.rerun()
-    st.stop()
+    st.markdown('<div class="sub-text">Connecting candidates to nearby opportunities 💼</div>', unsafe_allow_html=True)
+    time.sleep(2)
+    st.session_state.show_main = True
+    st.rerun()
 
-# ---------------------- MAIN PAGE ----------------------
+# ---------------------- MAIN APP ----------------------
 st.title("🌍 Find Nearby Jobs")
-st.markdown("Enter your ZIP code and search for job opportunities near you within a chosen distance!")
+st.markdown("Enter your ZIP code and discover job opportunities near you!")
 
-zip_code = st.text_input("Enter Candidate ZIP Code:")
-radius = st.number_input("Enter search radius (in miles):", min_value=1, max_value=200, value=40)
-uploaded_file = st.file_uploader("📂 Upload your job CSV file (with columns: Client, Location, City, State, Gender, Language)", type=["csv"])
+zip_code = st.text_input("📍 Enter Candidate ZIP Code:")
+radius = st.number_input("🎯 Enter search radius (in miles):", min_value=1, max_value=200, value=40)
+uploaded_file = st.file_uploader("📂 Upload your Job CSV file (columns: Client, Location, City, State, Gender, Language)", type=["csv"])
 
 if uploaded_file is not None and zip_code:
-    with st.spinner("🔍 Searching nearby jobs..."):
+    with st.spinner("🔍 Searching for nearby jobs..."):
         df = pd.read_csv(uploaded_file)
         df.columns = df.columns.str.strip().str.lower()
 
@@ -97,7 +83,7 @@ if uploaded_file is not None and zip_code:
         # Get candidate coordinates
         candidate_location = geolocator.geocode({"postalcode": zip_code, "country": "USA"})
         if candidate_location is None:
-            st.error("❌ Could not find the entered ZIP code. Please try again.")
+            st.error("❌ Invalid ZIP code. Please try again.")
             st.stop()
 
         candidate_coords = (candidate_location.latitude, candidate_location.longitude)
@@ -144,6 +130,5 @@ if uploaded_file is not None and zip_code:
 
             # Display job details
             st.dataframe(nearby_jobs[["client", "city", "state", "gender", "language", "distance_miles"]])
-
 else:
     st.info("📍 Please enter ZIP code and upload a CSV to find nearby jobs.")
