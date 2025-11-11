@@ -88,7 +88,7 @@ if st.session_state.page == "welcome":
         <div class="big-btn">
     """, unsafe_allow_html=True)
 
-    # ✅ Centered “Let’s Start” button
+    # ✅ Centered button — fixed indentation
     st.markdown('<div style="display: flex; justify-content: center;">', unsafe_allow_html=True)
     if st.button("🚀 Let's Start", key="start-main"):
         st.session_state.page = "main"
