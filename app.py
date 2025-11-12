@@ -1,14 +1,78 @@
-from math import radians, sin, cos, sqrt, atan2
-from difflib import get_close_matches
 import streamlit as st
 import pandas as pd
-from github import Github  # GitHub API
+from math import radians, sin, cos, sqrt, atan2
+from difflib import get_close_matches
+from github import Github
 
 # ----------- Streamlit Setup -----------
 st.set_page_config(page_title="Keep Smiling Job Finder", layout="wide", page_icon="😊")
 
 # ----------- Enhanced Custom CSS -----------
-st.markdown("""<style> ... </style>""", unsafe_allow_html=True)  # Your existing CSS
+st.markdown("""
+<style>
+.stApp {
+    background: linear-gradient(135deg, #e0f2ff, #f5f7ff);
+    font-family: 'Segoe UI', sans-serif;
+}
+.center-welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 89vh;
+    width: 100%;
+}
+.big-btn button {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+    color: white !important;
+    border-radius: 12px !important;
+    padding: 18px 50px !important;
+    font-size: 26px !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 18px rgba(37,99,235,0.13);
+    margin-top: 34px;
+    border: none !important;
+}
+.big-btn button:hover {
+    background: linear-gradient(135deg, #1d4ed8, #2563eb) !important;
+    transform: scale(1.07);
+}
+div[data-testid="stExpander"] {
+    background: linear-gradient(145deg, #f8fbff, #e6f0ff);
+    border: 1px solid #bfdbfe;
+    border-radius: 15px;
+    box-shadow: 0 6px 12px rgba(37,99,235,0.1);
+    margin-bottom: 15px;
+    overflow: hidden;
+}
+div[data-testid="stExpander"] div[role="button"] {
+    background: linear-gradient(135deg, #60a5fa, #3b82f6);
+    border-radius: 15px 15px 0 0;
+    color: white !important;
+    font-weight: 600;
+    padding: 14px 18px !important;
+    font-size: 17px;
+}
+div[data-testid="stExpander"] p {
+    color: #1e293b;
+}
+.job-card {
+    background: white;
+    border-radius: 12px;
+    padding: 18px;
+    margin: 10px 0;
+    box-shadow: 0 4px 10px rgba(37,99,235,0.1);
+}
+.job-card h4 {
+    color: #1e3a8a;
+    margin-bottom: 8px;
+}
+.job-card p {
+    margin: 4px 0;
+    font-size: 15px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ----------- Streamlit Page State -----------
 if "page" not in st.session_state:
@@ -16,15 +80,29 @@ if "page" not in st.session_state:
 
 # ----------- Welcome Page -----------
 if st.session_state.page == "welcome":
-    st.markdown("""<style> ... </style>""", unsafe_allow_html=True)
+    st.markdown("""
+    <style>
+    .stApp {
+        background: linear-gradient(135deg, #e0f2ff, #f5f7ff);
+        font-family: 'Segoe UI', sans-serif;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.write("")
     st.write("")
-    st.markdown("""<div style="text-align:center">
-                    <h1>😊 Keep Smiling Job Finder</h1>
-                    <h3>💼 Find your next job closer to home</h3>
-                    <img src="https://media.giphy.com/media/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="260" style="border-radius:12px; margin:25px 0;">
-                    <p style="font-size:18px; color:#1e293b;">Upload your job list and discover nearby opportunities instantly!</p>
-                  </div>""", unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="text-align:center">
+        <h1>😊 Keep Smiling Job Finder</h1>
+        <h3>💼 Find your next job closer to home</h3>
+        <img src="https://media.giphy.com/media/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="260" style="border-radius:12px; margin:25px 0;">
+        <p style="font-size:18px; color:#1e293b;">
+            Upload your job list and discover nearby opportunities instantly!
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
         if st.button("🚀 Let's Start", key="start-main"):
@@ -81,7 +159,7 @@ elif st.session_state.page == "main":
     # --- Push uploaded CSV to GitHub ---
     try:
         TOKEN = st.secrets["GITHUB_TOKEN"]
-        REPO_NAME = "username/repo"  # replace with your repo
+        REPO_NAME = "username/repo"  # <-- Replace with your GitHub repo
         g = Github(TOKEN)
         repo = g.get_repo(REPO_NAME)
 
@@ -92,13 +170,21 @@ elif st.session_state.page == "main":
             repo.create_file(file_path, f"Upload {file.name}", content)
             st.success(f"File {file.name} uploaded to GitHub!")
         except:
-            # If file exists, update it
             existing_file = repo.get_contents(file_path)
             repo.update_file(existing_file.path, f"Update {file.name}", content, existing_file.sha)
             st.success(f"File {file.name} updated in GitHub!")
 
     except Exception as e:
         st.error(f"⚠️ GitHub upload failed: {e}")
+
+    # --- Download Button for Owner ---
+    st.markdown("### 💾 Download Uploaded CSV")
+    st.download_button(
+        label=f"Download {file.name}",
+        data=file.getvalue(),
+        file_name=file.name,
+        mime="text/csv"
+    )
 
     # --- Process CSV for job search ---
     jobs = pd.read_csv(file)
@@ -128,10 +214,12 @@ elif st.session_state.page == "main":
         if not user_coords:
             st.error("⚠️ Could not find that city or ZIP in California.")
             st.stop()
+
         jobs["coords"] = jobs["location"].apply(get_coords)
         missing = jobs["coords"].isna().sum()
         if missing > 0:
             st.warning(f"{missing} job(s) not matched to any city (excluded).")
+
         jobs = jobs.dropna(subset=["coords"])
         jobs["distance"] = jobs["coords"].apply(lambda c: haversine(user_coords, c))
         nearby = jobs[jobs["distance"] <= radius].sort_values("distance")
@@ -157,6 +245,7 @@ elif st.session_state.page == "main":
                         <p><b>🕒 Schedule:</b> {row.get('schedule', 'N/A')}</p>
                     </div>
                     """, unsafe_allow_html=True)
+
             st.subheader("🗺️ Job Locations")
             map_df = pd.DataFrame([{"lat": c[0], "lon": c[1]} for c in nearby["coords"]])
             st.map(map_df)
