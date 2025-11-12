@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import pydeck as pdk
+import re
 from math import radians, sin, cos, sqrt, atan2
 from difflib import get_close_matches
 
@@ -52,9 +54,6 @@ div[data-testid="stExpander"] div[role="button"] {
     padding: 14px 18px !important;
     font-size: 17px;
 }
-div[data-testid="stExpander"] p {
-    color: #1e293b;
-}
 .job-card {
     background: white;
     border-radius: 12px;
@@ -79,20 +78,6 @@ if "page" not in st.session_state:
 
 # ----------- Welcome Page -----------
 if st.session_state.page == "welcome":
-    st.markdown("""
-    <style>
-    .stApp {
-        background: linear-gradient(135deg, #e0f2ff, #f5f7ff);
-        font-family: 'Segoe UI', sans-serif;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Vertical space above content
-    st.write("")
-    st.write("")  # Add more st.write() or st.markdown("<br>") for more vertical spacing if needed
-
-    # Centered header and image
     st.markdown(
         """
         <div style="text-align:center">
@@ -107,14 +92,11 @@ if st.session_state.page == "welcome":
         unsafe_allow_html=True,
     )
 
-    # Center the button using columns (the only reliable approach!)
-    col1, col2, col3 = st.columns([1,2,1])
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # This button will be centered
-        if st.button("🚀 Let's Start", key="start-main"):
+        if st.button("🚀 Let's Start", key="start-main", use_container_width=True):
             st.session_state.page = "main"
             st.rerun()
-
 
 # ----------- Main App Page -----------
 elif st.session_state.page == "main":
@@ -136,19 +118,27 @@ elif st.session_state.page == "main":
 
     CA_CITIES, ZIP_COORDS = load_ca_data()
 
+    # --- Improved coordinate resolver ---
     def get_coords(name):
         if not name:
             return None
-        name = str(name).strip().lower().split(",")[0]
-        if name in CA_CITIES:
-            return CA_CITIES[name]
-        match = get_close_matches(name, CA_CITIES.keys(), n=1, cutoff=0.75)
+        name = str(name).strip().lower()
+        zip_match = re.search(r"\b\d{5}\b", name)
+        if zip_match:
+            z = zip_match.group()
+            if z in ZIP_COORDS:
+                return ZIP_COORDS[z]
+        base_name = name.split(",")[0].strip()
+        if base_name in CA_CITIES:
+            return CA_CITIES[base_name]
+        match = get_close_matches(base_name, CA_CITIES.keys(), n=1, cutoff=0.75)
         return CA_CITIES[match[0]] if match else None
 
+    # --- Distance function ---
     def haversine(c1, c2):
         if not c1 or not c2:
             return float('inf')
-        R = 3958.8  # Earth radius in miles
+        R = 3958.8  # miles
         lat1, lon1 = map(radians, c1)
         lat2, lon2 = map(radians, c2)
         dlat, dlon = lat2 - lat1, lon2 - lon1
@@ -173,10 +163,7 @@ elif st.session_state.page == "main":
     jobs['location'] = jobs['location'].astype(str).str.strip().str.lower()
 
     client_col = next((c for c in jobs.columns if 'client' in c), None)
-    if client_col:
-        jobs['client'] = jobs[client_col]
-    else:
-        jobs['client'] = "Unknown Client"
+    jobs['client'] = jobs[client_col] if client_col else "Unknown Client"
 
     # --- Search UI ---
     st.markdown("### 🔍 Search Jobs Near You")
@@ -206,8 +193,10 @@ elif st.session_state.page == "main":
             st.error("⚠️ Could not find that city or ZIP in California.")
             st.stop()
 
-        # --- Match job coordinates ---
-        jobs["coords"] = jobs["location"].apply(get_coords)
+        # --- Cache coordinate computation ---
+        if "coords" not in jobs.columns:
+            jobs["coords"] = jobs["location"].apply(get_coords)
+
         missing = jobs["coords"].isna().sum()
         if missing > 0:
             st.warning(f"{missing} job(s) not matched to any city (excluded).")
@@ -217,7 +206,7 @@ elif st.session_state.page == "main":
 
         nearby = jobs[jobs["distance"] <= radius].sort_values("distance")
 
-        # --- Results ---
+        # --- Results Display ---
         if nearby.empty:
             st.warning(f"No jobs found within {radius} miles of {query}.")
         else:
@@ -233,13 +222,29 @@ elif st.session_state.page == "main":
                         <h4>🏥 {client}</h4>
                         <p><b>📍 Location:</b> {loc}</p>
                         <p><b>📏 Distance:</b> {dist:.1f} miles</p>
-                        <p><b>👥 Positions:</b> {row.get('positions', 'N/A')}</p>
                         <p><b>🗣️ Language:</b> {row.get('language', 'N/A')}</p>
                         <p><b>💰 Pay Rate:</b> {row.get('pay_rate', 'N/A')}</p>
                         <p><b>🕒 Schedule:</b> {row.get('schedule', 'N/A')}</p>
                     </div>
                     """, unsafe_allow_html=True)
 
+            # --- Interactive Map ---
             st.subheader("🗺️ Job Locations")
-            map_df = pd.DataFrame([{"lat": c[0], "lon": c[1]} for c in nearby["coords"]])
-            st.map(map_df)
+            map_df = pd.DataFrame([
+                {"lat": c[0], "lon": c[1]} for c in nearby["coords"]
+            ])
+            layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=map_df,
+                get_position='[lon, lat]',
+                get_color='[37, 99, 235, 180]',
+                get_radius=600,
+            )
+            view_state = pdk.ViewState(latitude=user_coords[0], longitude=user_coords[1], zoom=7)
+            st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
+
+    # --- Back Button ---
+    st.markdown("---")
+    if st.button("⬅️ Back to Welcome"):
+        st.session_state.page = "welcome"
+        st.rerun()
