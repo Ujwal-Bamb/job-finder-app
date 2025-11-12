@@ -2,12 +2,12 @@ import streamlit as st
 import pandas as pd
 from math import radians, sin, cos, sqrt, atan2
 from difflib import get_close_matches
-from github import Github
+from github import Github, Auth
 
 # ----------- Streamlit Setup -----------
 st.set_page_config(page_title="Keep Smiling Job Finder", layout="wide", page_icon="😊")
 
-# ----------- Custom CSS -----------
+# ----------- Enhanced Custom CSS -----------
 st.markdown("""
 <style>
 .stApp { background: linear-gradient(135deg, #e0f2ff, #f5f7ff); font-family: 'Segoe UI', sans-serif; }
@@ -40,7 +40,7 @@ if st.session_state.page == "welcome":
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns([1,2,1])
     with col2:
         if st.button("🚀 Let's Start", key="start-main"):
             st.session_state.page = "main"
@@ -51,7 +51,7 @@ elif st.session_state.page == "main":
     st.title("😊 Keep Smiling Job Finder")
     st.write("Search caregiver job listings by city or ZIP code in California.")
 
-    # --- Load CA City/ZIP Data ---
+    # --- Load California city/ZIP data ---
     @st.cache_data(show_spinner=False, ttl=3600)
     def load_ca_data():
         url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/california_cities_minimal.csv"
@@ -85,104 +85,106 @@ elif st.session_state.page == "main":
         a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
         return R * 2 * atan2(sqrt(a), sqrt(1 - a))
 
-    # --- File Upload ---
+    # --- Upload Jobs CSV ---
     st.markdown("### 📂 Upload Job List")
     file = st.file_uploader("Upload your CSV (columns: client_name, location, language, pay rate, schedule)", type=["csv"])
 
-    if not file:
-        st.info("Please upload a CSV to continue.")
-        st.stop()
-
-    # --- GitHub Upload ---
-    try:
-        TOKEN = st.secrets["GITHUB"]["TOKEN"]
-        REPO_NAME = st.secrets["GITHUB"]["REPO_NAME"]
-        g = Github(TOKEN)
-        repo = g.get_repo(REPO_NAME)
-
-        content = file.getvalue()
-        file_path = f"uploads/{file.name}"
-
+    if file:
+        # --- Push uploaded CSV to GitHub ---
         try:
-            repo.create_file(file_path, f"Upload {file.name}", content)
-            st.success(f"✅ File {file.name} uploaded to GitHub!")
-        except:
-            existing_file = repo.get_contents(file_path)
-            repo.update_file(existing_file.path, f"Update {file.name}", content, existing_file.sha)
-            st.success(f"✅ File {file.name} updated in GitHub!")
+            # Use your token from secrets.toml or directly (not recommended in public code)
+            token = st.secrets["GITHUB"]["TOKEN"]
+            repo_name = st.secrets["GITHUB"]["REPO_NAME"]
 
-    except Exception as e:
-        st.error(f"⚠️ GitHub upload failed: {e}")
+            auth = Auth.Token(token)
+            g = Github(auth=auth)
+            repo = g.get_repo(repo_name)
 
-    # --- Download Button ---
-    st.markdown("### 💾 Download Uploaded CSV")
-    st.download_button(
-        label=f"Download {file.name}",
-        data=file.getvalue(),
-        file_name=file.name,
-        mime="text/csv"
-    )
+            content = file.getvalue()
+            file_path = f"uploads/{file.name}"
 
-    # --- Process CSV for Job Search ---
-    jobs = pd.read_csv(file)
-    jobs.columns = jobs.columns.str.lower().str.strip().str.replace(" ", "_")
-    if 'location' not in jobs.columns:
-        st.error("❌ Missing required column: 'location'")
-        st.stop()
-    jobs['location'] = jobs['location'].astype(str).str.strip().str.lower()
-    client_col = next((c for c in jobs.columns if 'client' in c), None)
-    jobs['client'] = jobs[client_col] if client_col else "Unknown Client"
+            try:
+                repo.create_file(file_path, f"Upload {file.name}", content)
+                st.success(f"✅ File {file.name} uploaded to GitHub!")
+            except:
+                existing_file = repo.get_contents(file_path)
+                repo.update_file(existing_file.path, f"Update {file.name}", content, existing_file.sha)
+                st.success(f"✅ File {file.name} updated in GitHub!")
 
-    # --- Search UI ---
-    st.markdown("### 🔍 Search Jobs Near You")
-    col1, col2, col3 = st.columns([2, 2, 1])
-    with col1:
-        search_type = st.radio("Search by", ["City", "ZIP Code"], horizontal=True)
-    with col2:
-        query = st.text_input("Enter City or ZIP", "").strip()
-    with col3:
-        radius = st.slider("Radius (miles)", 1, 100, 25)
+        except Exception as e:
+            st.error(f"⚠️ GitHub upload failed: {e}")
 
-    if st.button("🔎 Find Jobs", use_container_width=True):
-        if not query:
-            st.warning("Please enter a city or ZIP code.")
+        # --- Download button for owner ---
+        st.markdown("### 💾 Download Uploaded CSV")
+        st.download_button(
+            label=f"Download {file.name}",
+            data=file.getvalue(),
+            file_name=file.name,
+            mime="text/csv"
+        )
+
+        # --- Process CSV for job search ---
+        jobs = pd.read_csv(file)
+        jobs.columns = jobs.columns.str.lower().str.strip().str.replace(" ", "_")
+        if 'location' not in jobs.columns:
+            st.error("❌ Missing required column: 'location'")
             st.stop()
-        user_coords = ZIP_COORDS.get(query) if search_type=="ZIP Code" else get_coords(query)
-        if not user_coords:
-            st.error("⚠️ Could not find that city or ZIP in California.")
-            st.stop()
+        jobs['location'] = jobs['location'].astype(str).str.strip().str.lower()
+        client_col = next((c for c in jobs.columns if 'client' in c), None)
+        jobs['client'] = jobs[client_col] if client_col else "Unknown Client"
 
-        jobs["coords"] = jobs["location"].apply(get_coords)
-        missing = jobs["coords"].isna().sum()
-        if missing > 0:
-            st.warning(f"{missing} job(s) not matched to any city (excluded).")
+        # --- Search UI ---
+        st.markdown("### 🔍 Search Jobs Near You")
+        col1, col2, col3 = st.columns([2, 2, 1])
+        with col1:
+            search_type = st.radio("Search by", ["City", "ZIP Code"], horizontal=True)
+        with col2:
+            query = st.text_input("Enter City or ZIP", "").strip()
+        with col3:
+            radius = st.slider("Radius (miles)", 1, 100, 25)
 
-        jobs = jobs.dropna(subset=["coords"])
-        jobs["distance"] = jobs["coords"].apply(lambda c: haversine(user_coords, c))
-        nearby = jobs[jobs["distance"] <= radius].sort_values("distance")
+        if st.button("🔎 Find Jobs", use_container_width=True):
+            if not query:
+                st.warning("Please enter a city or ZIP code.")
+                st.stop()
+            user_coords = ZIP_COORDS.get(query) if search_type=="ZIP Code" else get_coords(query)
+            if not user_coords:
+                st.error("⚠️ Could not find that city or ZIP in California.")
+                st.stop()
 
-        if nearby.empty:
-            st.warning(f"No jobs found within {radius} miles of {query}.")
-        else:
-            st.success(f"🎯 Found {len(nearby)} job(s) within {radius} miles!")
-            for _, row in nearby.iterrows():
-                client = row.get("client", "Unknown Client")
-                loc = row.get("location", "Unknown Location")
-                dist = row["distance"]
-                header = f"🏥 {client} — {loc} ({dist:.1f} miles)"
-                with st.expander(header):
-                    st.markdown(f"""
-                    <div class='job-card'>
-                        <h4>🏥 {client}</h4>
-                        <p><b>📍 Location:</b> {loc}</p>
-                        <p><b>📏 Distance:</b> {dist:.1f} miles</p>
-                        <p><b>👥 Positions:</b> {row.get('positions', 'N/A')}</p>
-                        <p><b>🗣️ Language:</b> {row.get('language', 'N/A')}</p>
-                        <p><b>💰 Pay Rate:</b> {row.get('pay_rate', 'N/A')}</p>
-                        <p><b>🕒 Schedule:</b> {row.get('schedule', 'N/A')}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+            jobs["coords"] = jobs["location"].apply(get_coords)
+            missing = jobs["coords"].isna().sum()
+            if missing > 0:
+                st.warning(f"{missing} job(s) not matched to any city (excluded).")
 
-            st.subheader("🗺️ Job Locations")
-            map_df = pd.DataFrame([{"lat": c[0], "lon": c[1]} for c in nearby["coords"]])
-            st.map(map_df)
+            jobs = jobs.dropna(subset=["coords"])
+            jobs["distance"] = jobs["coords"].apply(lambda c: haversine(user_coords, c))
+            nearby = jobs[jobs["distance"] <= radius].sort_values("distance")
+
+            if nearby.empty:
+                st.warning(f"No jobs found within {radius} miles of {query}.")
+            else:
+                st.success(f"🎯 Found {len(nearby)} job(s) within {radius} miles!")
+                for _, row in nearby.iterrows():
+                    client = row.get("client", "Unknown Client")
+                    loc = row.get("location", "Unknown Location")
+                    dist = row["distance"]
+                    header = f"🏥 {client} — {loc} ({dist:.1f} miles)"
+                    with st.expander(header):
+                        st.markdown(f"""
+                        <div class='job-card'>
+                            <h4>🏥 {client}</h4>
+                            <p><b>📍 Location:</b> {loc}</p>
+                            <p><b>📏 Distance:</b> {dist:.1f} miles</p>
+                            <p><b>👥 Positions:</b> {row.get('positions', 'N/A')}</p>
+                            <p><b>🗣️ Language:</b> {row.get('language', 'N/A')}</p>
+                            <p><b>💰 Pay Rate:</b> {row.get('pay_rate', 'N/A')}</p>
+                            <p><b>🕒 Schedule:</b> {row.get('schedule', 'N/A')}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                st.subheader("🗺️ Job Locations")
+                map_df = pd.DataFrame([{"lat": c[0], "lon": c[1]} for c in nearby["coords"]])
+                st.map(map_df)
+    else:
+        st.info("Please upload a CSV to continue.")
