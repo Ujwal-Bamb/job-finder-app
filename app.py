@@ -230,52 +230,18 @@ elif st.session_state.page == "main":
 
             # --- Interactive Map ---
             st.subheader("🗺️ Job Locations")
-
-            # Prepare job coordinates
             map_df = pd.DataFrame([
                 {"lat": c[0], "lon": c[1]} for c in nearby["coords"]
             ])
-
-            # Add user's location
-            user_df = pd.DataFrame([{
-                "lat": user_coords[0],
-                "lon": user_coords[1]
-            }])
-
-            # Job layer (blue markers)
-            job_layer = pdk.Layer(
+            layer = pdk.Layer(
                 "ScatterplotLayer",
                 data=map_df,
                 get_position='[lon, lat]',
-                get_color='[37, 99, 235, 200]',   # blue
-                get_radius=700,
-                pickable=True
+                get_color='[37, 99, 235, 180]',
+                get_radius=600,
             )
-
-            # User location layer (red marker)
-            user_layer = pdk.Layer(
-                "ScatterplotLayer",
-                data=user_df,
-                get_position='[lon, lat]',
-                get_color='[255, 0, 0, 255]',      # bright red
-                get_radius=900,
-                pickable=False
-            )
-
-            # Map view centered on user
-            view_state = pdk.ViewState(
-                latitude=user_coords[0],
-                longitude=user_coords[1],
-                zoom=8,
-                pitch=30
-            )
-
-            # Colorful satellite view
-            st.pydeck_chart(pdk.Deck(
-                map_style="mapbox://styles/mapbox/satellite-streets-v12",
-                layers=[job_layer, user_layer],
-                initial_view_state=view_state,
-            ))
+            view_state = pdk.ViewState(latitude=user_coords[0], longitude=user_coords[1], zoom=7)
+            st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
 
     # --- Back Button ---
     st.markdown("---")
