@@ -1,4 +1,4 @@
-explain everystep every line what is it how is working us of library index syntex function code everything in brief import streamlit as st
+import streamlit as st
 import pandas as pd
 from math import radians, sin, cos, sqrt, atan2
 from difflib import get_close_matches
