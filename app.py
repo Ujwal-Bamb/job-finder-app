@@ -5,31 +5,15 @@ import re
 from math import radians, sin, cos, sqrt, atan2
 from difflib import get_close_matches
 
-# ----------- Streamlit Setup -----------
-st.set_page_config(page_title="Keep Smiling Job Finder", layout="wide", page_icon="😊")
+# ------------------ Streamlit Setup ------------------
+st.set_page_config(page_title="😊 Keep Smiling Job Finder", layout="wide")
 
-# ----------- Custom CSS -----------
+# ------------------ Enhanced Custom CSS ------------------
 st.markdown("""
 <style>
 .stApp {
     background: linear-gradient(135deg, #e0f2ff, #f5f7ff);
     font-family: 'Segoe UI', sans-serif;
-}
-div[data-testid="stExpander"] {
-    background: linear-gradient(145deg, #f8fbff, #e6f0ff);
-    border: 1px solid #bfdbfe;
-    border-radius: 15px;
-    box-shadow: 0 6px 12px rgba(37,99,235,0.1);
-    margin-bottom: 15px;
-    overflow: hidden;
-}
-div[data-testid="stExpander"] div[role="button"] {
-    background: linear-gradient(135deg, #60a5fa, #3b82f6);
-    border-radius: 15px 15px 0 0;
-    color: white !important;
-    font-weight: 600;
-    padding: 14px 18px !important;
-    font-size: 17px;
 }
 .job-card {
     background: white;
@@ -49,11 +33,7 @@ div[data-testid="stExpander"] div[role="button"] {
 </style>
 """, unsafe_allow_html=True)
 
-# ----------- Title Section -----------
-st.title("😊 Keep Smiling Job Finder")
-st.write("Search caregiver job listings by city or ZIP code in California.")
-
-# ----------- Load California City/ZIP Data -----------
+# ------------------ Load Data ------------------
 @st.cache_data(show_spinner=False, ttl=3600)
 def load_ca_data():
     url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/california_cities_minimal.csv"
@@ -66,9 +46,18 @@ def load_ca_data():
                 zips[z.strip()] = (row['lat'], row['lng'])
     return cities, zips
 
-CA_CITIES, ZIP_COORDS = load_ca_data()
+@st.cache_data(show_spinner=False)
+def load_default_jobs():
+    url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/job_finder.csv"
+    try:
+        return pd.read_csv(url, encoding="utf-8")
+    except UnicodeDecodeError:
+        return pd.read_csv(url, encoding="latin1")
 
-# ----------- Helper Functions -----------
+CA_CITIES, ZIP_COORDS = load_ca_data()
+jobs = load_default_jobs()
+
+# ------------------ Coordinate Resolver ------------------
 def get_coords(name):
     if not name:
         return None
@@ -84,7 +73,7 @@ def get_coords(name):
     match = get_close_matches(base_name, CA_CITIES.keys(), n=1, cutoff=0.75)
     return CA_CITIES[match[0]] if match else None
 
-
+# ------------------ Distance Calculator ------------------
 def haversine(c1, c2):
     if not c1 or not c2:
         return float('inf')
@@ -95,39 +84,20 @@ def haversine(c1, c2):
     a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
     return R * 2 * atan2(sqrt(a), sqrt(1 - a))
 
-# ----------- Load Built-in Job CSV -----------
-st.markdown("### 📂 Job List (Built-in)")
+# ------------------ Main Interface ------------------
+st.title("😊 Keep Smiling Job Finder")
+st.write("Search caregiver job listings by city or ZIP code in California.")
 
-@st.cache_data
-def load_default_jobs():
-    url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/job_finder.csv"
-    return pd.read_csv(url)
-
-uploaded = st.file_uploader("Optional: Upload your own CSV", type=["csv"])
-
-if uploaded:
-    st.success("✅ Using uploaded file.")
-    jobs = pd.read_csv(uploaded)
-else:
-    st.info("Using built-in job list from GitHub.")
-    jobs = load_default_jobs()
-
-# ----------- Clean & Validate Data -----------
+# Clean up columns
 jobs.columns = jobs.columns.str.lower().str.strip().str.replace(" ", "_")
-
 if 'location' not in jobs.columns:
     st.error("❌ Missing required column: 'location'")
     st.stop()
-
 jobs['location'] = jobs['location'].astype(str).str.strip().str.lower()
 client_col = next((c for c in jobs.columns if 'client' in c), None)
 jobs['client'] = jobs[client_col] if client_col else "Unknown Client"
 
-# ----------- Optional: Show Job Preview -----------
-st.subheader("📋 Sample Job Data")
-st.dataframe(jobs.head(5))
-
-# ----------- Search Section -----------
+# ------------------ Search UI ------------------
 st.markdown("### 🔍 Search Jobs Near You")
 col1, col2, col3 = st.columns([2, 2, 1])
 with col1:
@@ -137,13 +107,11 @@ with col2:
 with col3:
     radius = st.slider("Radius (miles)", 1, 100, 25)
 
-# ----------- Search Logic -----------
 if st.button("🔎 Find Jobs", use_container_width=True):
     if not query:
         st.warning("Please enter a city or ZIP code.")
         st.stop()
 
-    # --- Get user coordinates ---
     if search_type == "ZIP Code":
         if not query.isdigit() or len(query) != 5:
             st.error("Please enter a valid 5-digit ZIP code.")
@@ -156,7 +124,7 @@ if st.button("🔎 Find Jobs", use_container_width=True):
         st.error("⚠️ Could not find that city or ZIP in California.")
         st.stop()
 
-    # --- Compute distances ---
+    # Resolve coordinates for all jobs
     if "coords" not in jobs.columns:
         jobs["coords"] = jobs["location"].apply(get_coords)
 
@@ -169,7 +137,7 @@ if st.button("🔎 Find Jobs", use_container_width=True):
 
     nearby = jobs[jobs["distance"] <= radius].sort_values("distance")
 
-    # --- Results Display ---
+    # ------------------ Results Display ------------------
     if nearby.empty:
         st.warning(f"No jobs found within {radius} miles of {query}.")
     else:
@@ -191,7 +159,7 @@ if st.button("🔎 Find Jobs", use_container_width=True):
                 </div>
                 """, unsafe_allow_html=True)
 
-        # --- Interactive Map ---
+        # ------------------ Interactive Map ------------------
         st.subheader("🗺️ Job Locations")
         map_df = pd.DataFrame([
             {"lat": c[0], "lon": c[1]} for c in nearby["coords"]
