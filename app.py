@@ -85,7 +85,7 @@ if st.session_state.page == "welcome":
             <h3>💼 Find your next job closer to home</h3>
             <img src="https://media.giphy.com/media/xT1R9I7Ne3mAQhXcWc/giphy.gif" width="260" style="border-radius:12px; margin:25px 0;">
             <p style="font-size:18px; color:#1e293b;">
-                Upload your job list and discover nearby opportunities instantly!
+                Find nearby caregiver opportunities — no upload needed, it’s built-in!
             </p>
         </div>
         """,
@@ -145,15 +145,24 @@ elif st.session_state.page == "main":
         a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
         return R * 2 * atan2(sqrt(a), sqrt(1 - a))
 
-    # --- Upload Jobs CSV ---
-    st.markdown("### 📂 Upload Job List")
-    file = st.file_uploader("Upload your CSV (columns: client_name, location, language, pay rate, schedule)", type=["csv"])
+    # --- Load Built-in Job CSV ---
+    st.markdown("### 📂 Job List (Built-in)")
 
-    if not file:
-        st.info("Please upload a CSV to continue.")
-        st.stop()
+    @st.cache_data
+    def load_default_jobs():
+        url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/job_finder.csv"
+        return pd.read_csv(url)
 
-    jobs = pd.read_csv(file)
+    uploaded = st.file_uploader("Optional: Upload your own CSV", type=["csv"])
+
+    if uploaded:
+        st.success("✅ Using uploaded file.")
+        jobs = pd.read_csv(uploaded)
+    else:
+        st.info("Using built-in job list from GitHub.")
+        jobs = load_default_jobs()
+
+    # --- Clean Data ---
     jobs.columns = jobs.columns.str.lower().str.strip().str.replace(" ", "_")
 
     if 'location' not in jobs.columns:
@@ -193,7 +202,7 @@ elif st.session_state.page == "main":
             st.error("⚠️ Could not find that city or ZIP in California.")
             st.stop()
 
-        # --- Cache coordinate computation ---
+        # --- Compute distances ---
         if "coords" not in jobs.columns:
             jobs["coords"] = jobs["location"].apply(get_coords)
 
