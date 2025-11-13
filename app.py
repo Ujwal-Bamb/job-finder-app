@@ -45,7 +45,7 @@ def load_ca_data():
     for _, row in df.iterrows():
         city_name = str(row['city']).strip().lower()
         cities[city_name] = (row['lat'], row['lng'])
-        if pd.notna(row.get('zips', None)):
+        if pd.notna(row.get('zips')):
             for z in str(row['zips']).split():
                 zips[z.strip()] = {"coords": (row['lat'], row['lng']), "city": city_name.title()}
     return cities, zips
@@ -56,12 +56,12 @@ def load_default_jobs():
     url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/job_finder.csv"
     try:
         response = requests.get(url)
+        response.raise_for_status()
         raw_data = response.content
-        detected = chardet.detect(raw_data)
-        encoding = detected["encoding"] or "utf-8"
+        encoding = chardet.detect(raw_data)["encoding"] or "utf-8"
         return pd.read_csv(StringIO(raw_data.decode(encoding)), on_bad_lines="skip")
     except Exception as e:
-        st.error(f"Error loading CSV: {e}")
+        st.error(f"Error loading job data: {e}")
         return pd.DataFrame()
 
 
@@ -89,7 +89,7 @@ def get_coords(name):
 def haversine(c1, c2):
     if not c1 or not c2:
         return float('inf')
-    R = 3958.8  # miles
+    R = 3958.8
     lat1, lon1 = map(radians, c1)
     lat2, lon2 = map(radians, c2)
     dlat, dlon = lat2 - lat1, lon2 - lon1
@@ -101,9 +101,13 @@ def haversine(c1, c2):
 st.title("😊 Keep Smiling")
 st.write("Search caregiver job listings by city or ZIP code in California.")
 
+if jobs.empty:
+    st.error("Job data could not be loaded.")
+    st.stop()
+
 jobs.columns = jobs.columns.str.lower().str.strip().str.replace(" ", "_")
 if 'location' not in jobs.columns:
-    st.error("❌ Missing required column: 'location'")
+    st.error("❌ Missing 'location' column in CSV.")
     st.stop()
 jobs['location'] = jobs['location'].astype(str).str.strip().str.lower()
 client_col = next((c for c in jobs.columns if 'client' in c), None)
@@ -117,12 +121,12 @@ with col1:
     search_type = st.radio("Search by", ["City", "ZIP Code"], horizontal=True)
 
 with col2:
-    query = st.text_input("Enter City or ZIP", st.session_state.get("query", ""), key="query_input")
+    query = st.text_input("Enter City or ZIP", "", key="query")
 
 with col3:
     radius = st.slider("Radius (miles)", 1, 100, 25)
 
-# 🔹 Show detected city name when ZIP is entered
+# Show detected city when ZIP entered
 if search_type == "ZIP Code" and query.isdigit() and len(query) == 5:
     if query in ZIP_COORDS:
         city_name = ZIP_COORDS[query]["city"]
@@ -130,12 +134,11 @@ if search_type == "ZIP Code" and query.isdigit() and len(query) == 5:
     else:
         st.warning("⚠️ ZIP code not found in California.")
 
-# ------------------ Search Trigger ------------------
-find_button = st.button("🔎 Find Jobs", use_container_width=True)
-enter_pressed = st.session_state.query_input.strip() != ""
+# ------------------ Search Trigger (Enter + Button) ------------------
+trigger_search = st.button("🔎 Find Jobs", use_container_width=True) or query.endswith("\n")
 
-if find_button or enter_pressed:
-    query = st.session_state.query_input.strip()
+if trigger_search:
+    query = query.strip()
     if not query:
         st.warning("Please enter a city or ZIP code.")
         st.stop()
@@ -153,13 +156,7 @@ if find_button or enter_pressed:
         st.error("⚠️ Could not find that city or ZIP in California.")
         st.stop()
 
-    if "coords" not in jobs.columns:
-        jobs["coords"] = jobs["location"].apply(get_coords)
-
-    missing = jobs["coords"].isna().sum()
-    if missing > 0:
-        st.warning(f"{missing} job(s) not matched to any city (excluded).")
-
+    jobs["coords"] = jobs["location"].apply(get_coords)
     jobs = jobs.dropna(subset=["coords"])
     jobs["distance"] = jobs["coords"].apply(lambda c: haversine(user_coords, c))
     nearby = jobs[jobs["distance"] <= radius].sort_values("distance")
@@ -172,8 +169,7 @@ if find_button or enter_pressed:
             client = row.get("client", "Unknown Client")
             loc = row.get("location", "Unknown Location")
             dist = row["distance"]
-            header = f"🏥 {client} — {loc} ({dist:.1f} miles)"
-            with st.expander(header):
+            with st.expander(f"🏥 {client} — {loc} ({dist:.1f} miles)"):
                 st.markdown(f"""
                 <div class='job-card'>
                     <h4>🏥 {client}</h4>
