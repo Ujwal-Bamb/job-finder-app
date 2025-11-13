@@ -7,3 +7,4 @@ streamlit-folium
 numpy
 uszipcode
 PyGithub
+chardet
