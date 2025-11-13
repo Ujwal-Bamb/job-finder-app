@@ -43,10 +43,11 @@ def load_ca_data():
     df = pd.read_csv(url)
     cities, zips = {}, {}
     for _, row in df.iterrows():
-        cities[str(row['city']).strip().lower()] = (row['lat'], row['lng'])
+        city_name = str(row['city']).strip().lower()
+        cities[city_name] = (row['lat'], row['lng'])
         if pd.notna(row.get('zips', None)):
             for z in str(row['zips']).split():
-                zips[z.strip()] = (row['lat'], row['lng'])
+                zips[z.strip()] = {"coords": (row['lat'], row['lng']), "city": city_name.title()}
     return cities, zips
 
 
@@ -76,7 +77,7 @@ def get_coords(name):
     if zip_match:
         z = zip_match.group()
         if z in ZIP_COORDS:
-            return ZIP_COORDS[z]
+            return ZIP_COORDS[z]["coords"]
     base_name = name.split(",")[0].strip()
     if base_name in CA_CITIES:
         return CA_CITIES[base_name]
@@ -121,10 +122,16 @@ with col2:
 with col3:
     radius = st.slider("Radius (miles)", 1, 100, 25)
 
-# Keep Find button always visible
-find_button = st.button("🔎 Find Jobs", use_container_width=True)
+# 🔹 Show detected city name when ZIP is entered
+if search_type == "ZIP Code" and query.isdigit() and len(query) == 5:
+    if query in ZIP_COORDS:
+        city_name = ZIP_COORDS[query]["city"]
+        st.info(f"📍 ZIP {query} corresponds to **{city_name}**, California.")
+    else:
+        st.warning("⚠️ ZIP code not found in California.")
 
-# Detect Enter press
+# ------------------ Search Trigger ------------------
+find_button = st.button("🔎 Find Jobs", use_container_width=True)
 enter_pressed = st.session_state.query_input.strip() != ""
 
 if find_button or enter_pressed:
@@ -137,7 +144,8 @@ if find_button or enter_pressed:
         if not query.isdigit() or len(query) != 5:
             st.error("Please enter a valid 5-digit ZIP code.")
             st.stop()
-        user_coords = ZIP_COORDS.get(query)
+        zip_info = ZIP_COORDS.get(query)
+        user_coords = zip_info["coords"] if zip_info else None
     else:
         user_coords = get_coords(query)
 
