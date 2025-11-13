@@ -9,7 +9,7 @@ from math import radians, sin, cos, sqrt, atan2
 from difflib import get_close_matches
 
 # ------------------ Streamlit Setup ------------------
-st.set_page_config(page_title="😊 Keep Smiling Job Finder", layout="wide")
+st.set_page_config(page_title="😊 Keep Smiling", layout="wide")
 
 # ------------------ Enhanced Custom CSS ------------------
 st.markdown("""
@@ -98,7 +98,7 @@ def haversine(c1, c2):
 
 
 # ------------------ Main Interface ------------------
-st.title("😊 Keep Smiling Job Finder")
+st.title("😊 Keep Smiling")
 st.write("Search caregiver job listings by city or ZIP code in California.")
 
 jobs.columns = jobs.columns.str.lower().str.strip().str.replace(" ", "_")
