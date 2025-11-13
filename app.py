@@ -120,8 +120,8 @@ with col2:
 with col3:
     radius = st.slider("Radius (miles)", 1, 100, 25)
 
-# Auto-search when user presses Enter
-search_triggered = query != ""
+# Trigger search when Enter pressed OR button clicked
+search_triggered = query != "" or st.button("🔎 Find Jobs", use_container_width=True)
 
 if search_triggered:
     if not query:
