@@ -2,6 +2,9 @@ import streamlit as st
 import pandas as pd
 import pydeck as pdk
 import re
+import requests
+import chardet
+from io import StringIO
 from math import radians, sin, cos, sqrt, atan2
 from difflib import get_close_matches
 
@@ -46,13 +49,21 @@ def load_ca_data():
                 zips[z.strip()] = (row['lat'], row['lng'])
     return cities, zips
 
+
 @st.cache_data(show_spinner=False)
 def load_default_jobs():
     url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/job_finder.csv"
     try:
-        return pd.read_csv(url, encoding="utf-8")
-    except UnicodeDecodeError:
-        return pd.read_csv(url, encoding="latin1")
+        # Detect encoding dynamically
+        response = requests.get(url)
+        raw_data = response.content
+        detected = chardet.detect(raw_data)
+        encoding = detected["encoding"] or "utf-8"
+        return pd.read_csv(StringIO(raw_data.decode(encoding)), on_bad_lines="skip")
+    except Exception as e:
+        st.error(f"Error loading CSV: {e}")
+        return pd.DataFrame()
+
 
 CA_CITIES, ZIP_COORDS = load_ca_data()
 jobs = load_default_jobs()
@@ -73,6 +84,7 @@ def get_coords(name):
     match = get_close_matches(base_name, CA_CITIES.keys(), n=1, cutoff=0.75)
     return CA_CITIES[match[0]] if match else None
 
+
 # ------------------ Distance Calculator ------------------
 def haversine(c1, c2):
     if not c1 or not c2:
@@ -83,6 +95,7 @@ def haversine(c1, c2):
     dlat, dlon = lat2 - lat1, lon2 - lon1
     a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
     return R * 2 * atan2(sqrt(a), sqrt(1 - a))
+
 
 # ------------------ Main Interface ------------------
 st.title("😊 Keep Smiling Job Finder")
@@ -107,7 +120,10 @@ with col2:
 with col3:
     radius = st.slider("Radius (miles)", 1, 100, 25)
 
-if st.button("🔎 Find Jobs", use_container_width=True):
+# Auto-search when user presses Enter
+search_triggered = query != ""
+
+if search_triggered:
     if not query:
         st.warning("Please enter a city or ZIP code.")
         st.stop()
@@ -161,9 +177,7 @@ if st.button("🔎 Find Jobs", use_container_width=True):
 
         # ------------------ Interactive Map ------------------
         st.subheader("🗺️ Job Locations")
-        map_df = pd.DataFrame([
-            {"lat": c[0], "lon": c[1]} for c in nearby["coords"]
-        ])
+        map_df = pd.DataFrame([{"lat": c[0], "lon": c[1]} for c in nearby["coords"]])
         layer = pdk.Layer(
             "ScatterplotLayer",
             data=map_df,
