@@ -54,7 +54,6 @@ def load_ca_data():
 def load_default_jobs():
     url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/job_finder.csv"
     try:
-        # Detect encoding dynamically
         response = requests.get(url)
         raw_data = response.content
         detected = chardet.detect(raw_data)
@@ -101,7 +100,6 @@ def haversine(c1, c2):
 st.title("😊 Keep Smiling Job Finder")
 st.write("Search caregiver job listings by city or ZIP code in California.")
 
-# Clean up columns
 jobs.columns = jobs.columns.str.lower().str.strip().str.replace(" ", "_")
 if 'location' not in jobs.columns:
     st.error("❌ Missing required column: 'location'")
@@ -113,17 +111,24 @@ jobs['client'] = jobs[client_col] if client_col else "Unknown Client"
 # ------------------ Search UI ------------------
 st.markdown("### 🔍 Search Jobs Near You")
 col1, col2, col3 = st.columns([2, 2, 1])
+
 with col1:
     search_type = st.radio("Search by", ["City", "ZIP Code"], horizontal=True)
+
 with col2:
-    query = st.text_input("Enter City or ZIP", "").strip()
+    query = st.text_input("Enter City or ZIP", st.session_state.get("query", ""), key="query_input")
+
 with col3:
     radius = st.slider("Radius (miles)", 1, 100, 25)
 
-# Trigger search when Enter pressed OR button clicked
-search_triggered = query != "" or st.button("🔎 Find Jobs", use_container_width=True)
+# Keep Find button always visible
+find_button = st.button("🔎 Find Jobs", use_container_width=True)
 
-if search_triggered:
+# Detect Enter press
+enter_pressed = st.session_state.query_input.strip() != ""
+
+if find_button or enter_pressed:
+    query = st.session_state.query_input.strip()
     if not query:
         st.warning("Please enter a city or ZIP code.")
         st.stop()
@@ -140,7 +145,6 @@ if search_triggered:
         st.error("⚠️ Could not find that city or ZIP in California.")
         st.stop()
 
-    # Resolve coordinates for all jobs
     if "coords" not in jobs.columns:
         jobs["coords"] = jobs["location"].apply(get_coords)
 
@@ -150,10 +154,8 @@ if search_triggered:
 
     jobs = jobs.dropna(subset=["coords"])
     jobs["distance"] = jobs["coords"].apply(lambda c: haversine(user_coords, c))
-
     nearby = jobs[jobs["distance"] <= radius].sort_values("distance")
 
-    # ------------------ Results Display ------------------
     if nearby.empty:
         st.warning(f"No jobs found within {radius} miles of {query}.")
     else:
