@@ -11,7 +11,7 @@ from difflib import get_close_matches
 # ------------------ Streamlit Setup ------------------
 st.set_page_config(page_title="😊 Keep Smiling", layout="wide")
 
-# ------------------ Enhanced Custom CSS ------------------
+# ------------------ Custom CSS ------------------
 st.markdown("""
 <style>
 .stApp {
@@ -39,7 +39,7 @@ st.markdown("""
 # ------------------ Load Data ------------------
 @st.cache_data(show_spinner=False, ttl=3600)
 def load_ca_data():
-    url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/california_cities_minimal.csv"
+    url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/refs/heads/main/california_cities_minimal.csv"
     df = pd.read_csv(url)
     cities, zips = {}, {}
     for _, row in df.iterrows():
@@ -53,7 +53,7 @@ def load_ca_data():
 
 @st.cache_data(show_spinner=False)
 def load_default_jobs():
-    url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/main/job_finder.csv"
+    url = "https://raw.githubusercontent.com/Ujwal-Bamb/job-finder-app/refs/heads/main/job_finder.csv"
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -121,7 +121,7 @@ with col1:
     search_type = st.radio("Search by", ["City", "ZIP Code"], horizontal=True)
 
 with col2:
-    query = st.text_input("Enter City or ZIP", "", key="query")
+    query = st.text_input("Enter City or ZIP", "")
 
 with col3:
     radius = st.slider("Radius (miles)", 1, 100, 25)
@@ -134,12 +134,16 @@ if search_type == "ZIP Code" and query.isdigit() and len(query) == 5:
     else:
         st.warning("⚠️ ZIP code not found in California.")
 
-# ------------------ Search Trigger (Enter + Button) ------------------
-trigger_search = st.button("🔎 Find Jobs", use_container_width=True) or query.endswith("\n")
+# ------------------ Search Trigger ------------------
+search_clicked = st.button("🔎 Find Jobs", use_container_width=True)
 
-if trigger_search:
-    query = query.strip()
-    if not query:
+# Also trigger on pressing Enter
+if query and st.session_state.get("query_entered") != query:
+    st.session_state["query_entered"] = query
+    search_clicked = True
+
+if search_clicked:
+    if not query.strip():
         st.warning("Please enter a city or ZIP code.")
         st.stop()
 
@@ -181,7 +185,7 @@ if trigger_search:
                 </div>
                 """, unsafe_allow_html=True)
 
-        # ------------------ Interactive Map ------------------
+        # ------------------ Map ------------------
         st.subheader("🗺️ Job Locations")
         map_df = pd.DataFrame([{"lat": c[0], "lon": c[1]} for c in nearby["coords"]])
         layer = pdk.Layer(
